@@ -12,17 +12,22 @@ name: Daily Shorts Automation (4x/gün)
 # yerleştirildi: öğle arası, öğleden sonra "altın saat" ve akşam boş vakti.
 #
 #  TRT saati -> UTC cron
-#  13:00 -> 10:00  (öğle zirvesi)
-#  16:00 -> 13:00  (öğleden sonra altın saat)
-#  19:00 -> 16:00  (akşam zirvesi)
-#  21:30 -> 18:30  (gece öncesi son dilim)
+#  13:17 -> 10:17  (ogle zirvesi)
+#  16:23 -> 13:23  (ogleden sonra altin saat)
+#  19:17 -> 16:17  (aksam zirvesi)
+#  21:37 -> 18:37  (gece oncesi son dilim)
+#
+#  NOT: Saatler bilerek tam saat basindan kaydirildi. GitHub Actions'in
+#  zamanlanmis isleri "en iyi caba" ile calisir; :00 dakikasinda dunyadaki
+#  butun cron'lar ayni anda siraya girdigi icin isler 30-60 dakika gecikiyor,
+#  yogunlukta tamamen atlanabiliyor. Tuhaf dakikalar bu kuyrugu atlatiyor.
 
 on:
   schedule:
-    - cron: "0 10 * * *"
-    - cron: "0 13 * * *"
-    - cron: "0 16 * * *"
-    - cron: "30 18 * * *"
+    - cron: "17 10 * * *"
+    - cron: "23 13 * * *"
+    - cron: "17 16 * * *"
+    - cron: "37 18 * * *"
   workflow_dispatch: {} # Repo > Actions sekmesinden manuel de tetikleyebilirsin
 
 permissions:
