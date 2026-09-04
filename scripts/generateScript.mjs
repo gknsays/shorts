@@ -156,8 +156,30 @@ function saveUsedTopics(topics) {
   fs.writeFileSync(USED_TOPICS_FILE, JSON.stringify(topics, null, 2));
 }
 
-async function callGemini(prompt, attempt = 1) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+// Aynı modelde ısrar etmek yerine yedek modellere de geçiyoruz.
+//
+// Gemini'nin ücretsiz katmanında 503 ("This model is currently experiencing high
+// demand") sık görülüyor ve bu yoğunluk model bazında. Tek modelde 5 kez deneyip
+// pes etmek, günde 4 kez çalışan bir işi tamamen düşürüyordu; farklı bir modelin
+// kapasitesi genelde aynı anda müsait oluyor.
+//
+// Sıra: .env'deki GEMINI_MODEL -> yedekler. GEMINI_MODEL_FALLBACKS ile
+// değiştirilebilir (virgülle ayrılmış).
+const FALLBACK_MODELS = (
+  process.env.GEMINI_MODEL_FALLBACKS ||
+  "gemini-flash-lite-latest,gemini-2.5-flash,gemini-2.5-flash-lite"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+const MODEL_CHAIN = [...new Set([MODEL, ...FALLBACK_MODELS])];
+
+const ATTEMPTS_PER_MODEL = 4;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function requestGemini(model, prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -168,24 +190,68 @@ async function callGemini(prompt, attempt = 1) {
     }),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    const isOverloaded = res.status === 503 || res.status === 429;
-    if (isOverloaded && attempt < 5) {
-      const waitSeconds = attempt * 8; // 8s, 16s, 24s, 32s
-      console.log(
-        `Gemini şu an yoğun (${res.status}). ${waitSeconds} saniye sonra tekrar denenecek (deneme ${attempt}/5)...`
+  if (res.ok) {
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text)
+      .join("");
+    if (!text) {
+      throw Object.assign(
+        new Error("Gemini boş yanıt döndü: " + JSON.stringify(data)),
+        { retryable: false }
       );
-      await new Promise((r) => setTimeout(r, waitSeconds * 1000));
-      return callGemini(prompt, attempt + 1);
     }
-    throw new Error(`Gemini API hatası (${res.status}): ${text}`);
+    return text;
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("");
-  if (!text) throw new Error("Gemini boş yanıt döndü: " + JSON.stringify(data));
-  return text;
+  const body = await res.text();
+  const error = new Error(`Gemini API hatası (${res.status}): ${body}`);
+  error.status = res.status;
+  // 503/429/500: geçici yoğunluk, beklemeye değer.
+  // 404: bu model bu anahtarla yok, beklemenin anlamı yok, sıradakine geç.
+  error.retryable = [429, 500, 503].includes(res.status);
+  error.modelMissing = res.status === 404;
+  throw error;
+}
+
+async function callGemini(prompt) {
+  let lastError = null;
+
+  for (const model of MODEL_CHAIN) {
+    for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
+      try {
+        const text = await requestGemini(model, prompt);
+        if (model !== MODEL) console.log(`   (yedek model kullanıldı: ${model})`);
+        return text;
+      } catch (err) {
+        lastError = err;
+
+        if (err.modelMissing) {
+          console.log(`"${model}" bu anahtarla kullanılamıyor, sıradaki modele geçiliyor...`);
+          break;
+        }
+        if (!err.retryable) throw err;
+
+        if (attempt === ATTEMPTS_PER_MODEL) {
+          console.log(`"${model}" ${ATTEMPTS_PER_MODEL} denemede de yanıt vermedi, sıradaki modele geçiliyor...`);
+          break;
+        }
+
+        // Üstel bekleme + rastgele sapma. Sapma önemli: 4 çalıştırma aynı
+        // anda tetiklenirse hepsi aynı saniyede tekrar denemesin.
+        const waitSeconds = Math.round(6 * 2 ** (attempt - 1) + Math.random() * 4);
+        console.log(
+          `${model} yoğun (${err.status}). ${waitSeconds}s sonra tekrar (deneme ${attempt}/${ATTEMPTS_PER_MODEL})...`
+        );
+        await sleep(waitSeconds * 1000);
+      }
+    }
+  }
+
+  throw new Error(
+    `Denenen tüm modeller yanıt vermedi (${MODEL_CHAIN.join(", ")}). ` +
+      `Son hata: ${lastError?.message ?? "bilinmiyor"}`
+  );
 }
 
 function extractJson(raw) {
