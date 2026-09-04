@@ -29,6 +29,15 @@ export type BackgroundClip = {
   durationInSeconds: number; // klibin kendi (kaynak) süresi
 };
 
+// Bir klibin zaman çizelgesinde hangi aralığı kaplayacağı. Aralıklar
+// scripts/render.mjs tarafından anlatım bölümlerine (KANCA/YANLIŞ/DOĞRU/KAPANIŞ)
+// göre hesaplanır; böylece "doğru yöntem" için indirilen klip gerçekten DOĞRU
+// bölümünde görünür.
+export type BackgroundScene = BackgroundClip & {
+  fromSeconds: number;
+  toSeconds: number;
+};
+
 export type AudioSegment = {
   src: string; // public/ klasörüne göre relative
   offsetSeconds: number; // bu parçanın zaman çizelgesindeki başlangıç saniyesi
@@ -37,7 +46,7 @@ export type AudioSegment = {
 export type ShortVideoProps = {
   title: string;
   audioSegments: AudioSegment[];
-  backgroundClips: BackgroundClip[];
+  backgroundScenes: BackgroundScene[];
   words: WordTiming[];
   phases?: PhaseMarker[];
   /** İlk 1.5-2.5 saniyede ekranı kaplayan kanca yazısı. */
@@ -82,25 +91,36 @@ const KenBurns: React.FC<{
   );
 };
 
-export const BackgroundReel: React.FC<{ clips: BackgroundClip[] }> = ({ clips }) => {
+export const BackgroundReel: React.FC<{ scenes: BackgroundScene[] }> = ({
+  scenes,
+}) => {
   const { fps, durationInFrames } = useVideoConfig();
 
-  const perClipDuration = useMemo(() => {
-    const n = clips.length;
-    if (n <= 1) return durationInFrames;
-    // TransitionSeries, ardışık sequence'lar arasındaki geçiş süresi kadar
-    // üst üste bindirme yapar; toplam süre hedefe ulaşsın diye buna göre hesaplıyoruz.
-    return Math.max(
-      TRANSITION_FRAMES + 1,
-      Math.round(
-        (durationInFrames + (n - 1) * TRANSITION_FRAMES) / n
-      )
-    );
-  }, [clips.length, durationInFrames]);
+  // Her sahnenin ekranda kalması gereken süre (kare cinsinden).
+  //
+  // TransitionSeries ardışık sequence'ları geçiş süresi kadar üst üste bindirir:
+  // toplam = Σ(süre) - (n-1) × geçiş. Sahne i'nin tam olarak kendi zaman
+  // aralığında başlaması için sondan önceki her sahneye geçiş süresi kadar
+  // ekliyoruz; böylece sahne i'nin başlangıcı Σ(önceki aralıklar) oluyor.
+  const sceneFrames = useMemo(() => {
+    const n = scenes.length;
+    return scenes.map((s, i) => {
+      const span = Math.max(
+        1,
+        Math.round((s.toSeconds - s.fromSeconds) * fps)
+      );
+      const isLast = i === n - 1;
+      return Math.max(
+        isLast ? 1 : TRANSITION_FRAMES + 1,
+        isLast ? span : span + TRANSITION_FRAMES
+      );
+    });
+  }, [scenes, fps]);
 
   const items: React.ReactNode[] = [];
 
-  clips.forEach((clip, i) => {
+  scenes.forEach((clip, i) => {
+    const perClipDuration = sceneFrames[i];
     const resolvedSrc = clip.src.startsWith("http")
       ? clip.src
       : staticFile(clip.src);
@@ -136,7 +156,7 @@ export const BackgroundReel: React.FC<{ clips: BackgroundClip[] }> = ({ clips })
       </TransitionSeries.Sequence>
     );
 
-    if (i < clips.length - 1) {
+    if (i < scenes.length - 1) {
       items.push(
         <TransitionSeries.Transition
           key={`transition-${i}`}
@@ -480,7 +500,7 @@ const SubscribeCue: React.FC = () => {
 export const ShortVideo: React.FC<ShortVideoProps> = ({
   title,
   audioSegments,
-  backgroundClips,
+  backgroundScenes,
   words,
   phases,
   hookText,
@@ -506,7 +526,7 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
-      <BackgroundReel clips={backgroundClips} />
+      <BackgroundReel scenes={backgroundScenes} />
 
       {/* Okunabilirlik için karartma */}
       <AbsoluteFill

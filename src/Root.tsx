@@ -12,9 +12,9 @@ const defaultProps: ShortVideoProps = {
   hookEndSeconds: 2.3,
   musicSrc: null,
   audioSegments: [{ src: "sample/narration.mp3", offsetSeconds: 0 }],
-  backgroundClips: [
-    { src: "sample/background.mp4", durationInSeconds: 5 },
-    { src: "sample/background.mp4", durationInSeconds: 5 },
+  backgroundScenes: [
+    { src: "sample/background.mp4", durationInSeconds: 5, fromSeconds: 0, toSeconds: 2 },
+    { src: "sample/background.mp4", durationInSeconds: 5, fromSeconds: 2, toSeconds: 4.7 },
   ],
   words: [
     { word: "Bulaşık", start: 0.0, end: 0.4 },

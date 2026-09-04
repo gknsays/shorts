@@ -376,8 +376,16 @@ ETİKETLER (tags) - 10-14 adet, şu üç grubu KARIŞTIRARAK ver:
 - Etiketler Türkçe olsun ve hiçbiri diğerinin birebir tekrarı olmasın.
 GÖRSEL/STOK VİDEO TERİMLERİ (bu kısım kritik - yanlış terim, konuyla alakasız
 arka plan videosuna yol açıyor):
-- "stok_arama_terimleri": TAM OLARAK 5 elemanlı İngilizce dizi. Her eleman, metinde
-  anlatılan FARKLI bir görsel anı betimleyen 2-4 kelimelik stok video sorgusu olsun.
+- "stok_arama_terimleri": TAM OLARAK 5 elemanlı İngilizce dizi. Sıra ÖNEMLİ, çünkü
+  her eleman videonun belirli bir bölümünde ekranda görünecek:
+    [0] KANCA bölümü  → konunun nesnesini genel olarak gösteren sahne
+    [1] YANLIŞ bölümü → hatalı/özensiz yapılan hali, dağınıklık, sorunun kendisi
+    [2] DOĞRU bölümü  → DÜZGÜN YAPILAN İŞLEMİN KENDİSİ
+    [3] DOĞRU bölümü  → aynı işlemin başka bir anı ya da temiz/başarılı sonucu
+    [4] KAPANIŞ       → memnun sonuç, tamamlanmış iş
+  [2] ve [3] EN KRİTİK OLANLAR: izleyici videoyu doğru yöntemi görmek için izliyor.
+  Bu ikisi mutlaka DOĞRU yöntemin uygulandığı eylemi betimlesin; "home repair diy",
+  "person working" gibi jenerik sahneler YAZMA - bunlar konuyu göstermez.
   Terimler stok video kütüphanelerinde GERÇEKTEN bulunabilecek, yaygın sahneler olsun;
   aşırı spesifik/sinematik tarifler ("hand rolling lemon counterclockwise") yazma.
   Her terimin içinde konunun ana nesnesi geçsin.
