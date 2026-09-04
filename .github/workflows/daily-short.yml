@@ -34,7 +34,16 @@ on:
     # Her 20 dakikada bir yoklanır; asıl karari scripts/slotGuard.mjs verir.
     # Boylece GitHub tetiklemelerin cogunu dusurse bile slot kacmaz.
     - cron: "*/20 10-21 * * *"
-  workflow_dispatch: {} # Repo > Actions sekmesinden manuel de tetikleyebilirsin
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Slot bekcisini atla ve hemen video uret"
+        type: boolean
+        default: true
+    # NOT: Bu is disaridan da tetiklenebiliyor (GitHub'in kendi zamanlayicisi bu
+    # depoda calismadigi icin). Disaridan gelen tetiklemeler "force" gondermez,
+    # bu yuzden bekci normal calisir ve ayni slot icin ikinci video uretilmez.
+    # Actions arayuzundeki "Run workflow" butonu ise force=true ile gelir.
 
 permissions:
   contents: write # data/used-topics.json'u geri commit'leyebilmek için
@@ -60,8 +69,8 @@ jobs:
       - name: Yayin slotu kontrolu
         id: guard
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manuel tetikleme - bekci atlaniyor."
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "Elle zorlanan calistirma - bekci atlaniyor."
             echo "should_run=true" >> $GITHUB_OUTPUT
             echo "slot=manual" >> $GITHUB_OUTPUT
           else
