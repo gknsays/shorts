@@ -1,0 +1,106 @@
+name: Daily Shorts Automation (4x/gün)
+
+# NEDEN 10 DEĞİL DE 4?
+# Aynı kanaldan gün içinde çok sayıda video çıktığında YouTube bunların her
+# birine daha küçük bir başlangıç gösterim havuzu ayırır ve videolar birbirinin
+# izleyicisini yer. Kanal henüz oturmamışken doğru strateji, gösterimi az
+# sayıda videoda yoğunlaştırıp izlenme oranını (retention) yukarı çekmektir.
+# İzlenme oranı düzelip videolar düzenli olarak 1000+ görüntülenmeye ulaşmaya
+# başladığında sıklığı kademeli artırabilirsin (önce 6, sonra 8).
+#
+# Saatler Türkiye saatine (TRT, UTC+3) göre en yüksek etkileşim pencerelerine
+# yerleştirildi: öğle arası, öğleden sonra "altın saat" ve akşam boş vakti.
+#
+#  TRT saati -> UTC cron
+#  13:00 -> 10:00  (öğle zirvesi)
+#  16:00 -> 13:00  (öğleden sonra altın saat)
+#  19:00 -> 16:00  (akşam zirvesi)
+#  21:30 -> 18:30  (gece öncesi son dilim)
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 16 * * *"
+    - cron: "30 18 * * *"
+  workflow_dispatch: {} # Repo > Actions sekmesinden manuel de tetikleyebilirsin
+
+permissions:
+  contents: write # data/used-topics.json'u geri commit'leyebilmek için
+
+# Aynı anda iki çalıştırma olmasın: ikisi de data/used-topics.json'un aynı
+# halini okur, aynı kategoriyi seçer ve benzer konu üretir; üstelik dosyayı
+# geri push ederken çakışırlar. Sıraya alıyoruz.
+concurrency:
+  group: daily-short
+  cancel-in-progress: false
+
+jobs:
+  create-and-upload-short:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sistem bağımlılıkları (Remotion/Chromium için)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 \
+            libpangocairo-1.0-0 libgtk-3-0
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: token.json oluştur (kayıtlı secret'tan)
+        run: echo '${{ secrets.YT_TOKEN_JSON }}' > token.json
+
+      - name: Pipeline'ı çalıştır (senaryo -> ses -> video -> YouTube)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          EDGE_TTS_VOICE: ${{ secrets.EDGE_TTS_VOICE }}
+          EDGE_TTS_RATE: ${{ secrets.EDGE_TTS_RATE }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          # İkinci ücretsiz stok video kaynağı. Tanımlı değilse sadece Pexels
+          # kullanılır; tanımlıysa konuya uygun klip bulma şansı belirgin artar.
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REDIRECT_URI: ${{ secrets.YT_REDIRECT_URI }}
+          YT_PRIVACY_STATUS: ${{ secrets.YT_PRIVACY_STATUS }}
+          # Kanalın nişi. Buradaki kategoriler dışına çıkılmaz.
+          # Repo > Settings > Secrets and variables > Actions > Variables
+          # altında CATEGORY_FILTER tanımlarsan o kullanılır; yoksa aşağıdaki
+          # varsayılan geçerli olur.
+          CATEGORY_FILTER: ${{ vars.CATEGORY_FILTER || 'Ev Tamiratı & Tadilat,Araba Bakımı & Sürüş,Ev Güvenliği & Acil Durum Bilgisi' }}
+          CHANNEL_TAGS: ${{ vars.CHANNEL_TAGS || 'kendin yap,ustadan tüyo,pratik bilgiler' }}
+        run: node scripts/run.mjs
+
+      - name: Üretilen videoyu artifact olarak sakla (yedek/kontrol amaçlı)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: short-video-${{ github.run_id }}
+          path: out/short.mp4
+          retention-days: 7
+
+      - name: Kullanılan konu geçmişini geri kaydet (aynı konu tekrar çıkmasın)
+        if: success()
+        run: |
+          git config user.name "shorts-automation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/used-topics.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: konu gecmisini guncelle [skip ci]"
+            git pull --rebase origin HEAD
+            git push
+          else
+            echo "Konu gecmisinde degisiklik yok, commit atlaniyor."
+          fi

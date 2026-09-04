@@ -1,0 +1,33 @@
+{
+  "name": "shorts-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "remotion studio src/Root.tsx",
+    "render": "node scripts/render.mjs",
+    "generate-script": "node scripts/generateScript.mjs",
+    "generate-voice": "node scripts/generateVoice.mjs",
+    "fetch-background": "node scripts/fetchBackground.mjs",
+    "upload": "node scripts/upload.mjs",
+    "run-pipeline": "node scripts/run.mjs",
+    "youtube-auth": "node scripts/youtubeAuth.mjs",
+    "make-music": "node scripts/makeMusic.mjs"
+  },
+  "dependencies": {
+    "@andresaya/edge-tts": "^1.8.0",
+    "@remotion/cli": "4.0.286",
+    "@remotion/renderer": "4.0.286",
+    "@remotion/transitions": "^4.0.286",
+    "dotenv": "^16.4.5",
+    "googleapis": "^140.0.1",
+    "open": "^10.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.286"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.1",
+    "typescript": "^5.4.5"
+  }
+}

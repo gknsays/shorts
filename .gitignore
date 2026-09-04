@@ -1,0 +1,14 @@
+node_modules
+out
+.env
+token.json
+data/metadata.json
+data/captions.json
+data/background.json
+public/audio
+public/video
+public/sample
+.remotion
+
+.backup-pre-optimize/
+public/music/
