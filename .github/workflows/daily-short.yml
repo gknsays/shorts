@@ -50,10 +50,28 @@ jobs:
 
       - name: Sistem bağımlılıkları (Remotion/Chromium için)
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-            libcups2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 \
-            libpangocairo-1.0-0 libgtk-3-0
+
+          # Adı sürümden sürüme değişmeyen paketler
+          PKGS="ffmpeg libnss3 libdbus-1-3 libxcomposite1 libxdamage1 libxrandr2 \
+                libxfixes3 libgbm1 libpangocairo-1.0-0 libcairo2 libgtk-3-0"
+
+          # Ubuntu 24.04'teki "t64" geçişinde bu paketler yeniden adlandırıldı
+          # (libasound2 -> libasound2t64 gibi). ubuntu-latest 24.04'e geçtiğinde
+          # eski adlar bulunamadığı için apt-get 100 koduyla düşüyordu.
+          # Hangi ad mevcutsa onu kuruyoruz; böylece runner imajı ileride
+          # değişse de bu adım kırılmıyor.
+          for base in libasound2 libatk1.0-0 libatk-bridge2.0-0 libcups2; do
+            if apt-cache show "${base}t64" > /dev/null 2>&1; then
+              PKGS="$PKGS ${base}t64"
+            else
+              PKGS="$PKGS ${base}"
+            fi
+          done
+
+          echo "Kurulacak paketler: $PKGS"
+          sudo apt-get install -y --no-install-recommends $PKGS
 
       - name: Bağımlılıkları kur
         run: npm ci
