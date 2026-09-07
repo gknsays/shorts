@@ -30,78 +30,66 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 // kategoriye ait sayılması için (tekrar kontrolü bozulmasın diye).
 const ALL_CATEGORIES = [
   {
-    name: "Mutfak & Yemek Hazırlama",
+    name: "Araba Bakımı & Sürüş",
     brief:
-      "yemek pişirme teknikleri, malzeme saklama, mutfak aleti kullanımı, tazelik ve gıda güvenliği",
+      "araç bakımı ve sürüş: lastik, direksiyon, far, silecek, cam, akü, motor yağı, " +
+      "fren, yakıt, yağmurda/karda sürüş, park, emniyet kemeri, araç içi düzen. " +
+      "Servise gitmeden yapılabilen ama yanlış yapıldığında pahalıya patlayan işler öncelikli",
   },
   {
-    name: "Ev Tamiratı & Tadilat",
-    aliases: ["Ev Tamiratı & Basit DIY"],
+    name: "Telefon & Teknoloji Kullanımı",
     brief:
-      "ev tadilatı ve tamirat işleri: boya-badana, alçı/duvar onarımı, fayans ve derz, silikon çekme, " +
-      "musluk/sifon/tesisat, kapı-pencere ayarı, dübel-vida-matkap kullanımı, elektrik prizi ve anahtar, " +
-      "parke/laminat, rutubet ve küf. Amatörün ustadan öğreneceği, işi baştan doğru yapmayı gösteren " +
-      "öğretici konular seç; usta çağırmadan çözülebilen ama yanlış yapıldığında pahalıya patlayan işler ideal",
-  },
-  {
-    name: "Ev Temizliği",
-    brief: "temizlik ürünleri, yüzey bakımı, leke çıkarma, beyaz eşya temizliği",
-  },
-  {
-    name: "Teknoloji & Telefon Kullanımı",
-    brief: "telefon/bilgisayar ayarları, batarya, depolama, güvenlik, internet",
+      "telefon ve bilgisayar: şarj alışkanlıkları, batarya, depolama, ekran, kablo, " +
+      "wifi ve modem, kulaklık, klavye, güvenlik ve şifre, uygulama ayarları",
   },
   {
     name: "Sağlık & Günlük Alışkanlıklar",
-    brief: "uyku, duruş, su tüketimi, günlük rutinler (tıbbi tavsiye değil, genel bilgi)",
-  },
-  {
-    name: "Para & Bütçe Yönetimi",
-    brief: "fatura, alışveriş, tasarruf, abonelik yönetimi",
-  },
-  {
-    name: "Ev Düzeni & Depolama",
-    brief: "dolap düzeni, saklama kapları, küçük alan kullanımı",
-  },
-  {
-    name: "Çamaşır & Kıyafet Bakımı",
-    brief: "yıkama programları, kumaş bakımı, kurutma, ütü, leke",
-  },
-  {
-    name: "Araba Bakımı & Sürüş",
     brief:
-      "araç bakımı ve sürüş: lastik basıncı ve diş derinliği, motor yağı ve filtre, akü ve şarj, " +
-      "fren balatası, cam suyu ve silecek, klima ve polen filtresi, rölanti, debriyaj ve vites " +
-      "kullanımı, yakıt tasarrufu, kış/yaz hazırlığı, yıkama ve boya bakımı. Servise gitmeden " +
-      "yapılabilen ama yanlış yapıldığında pahalı arızaya yol açan işler öncelikli",
+      "uyku, su tüketimi, duruş ve masa başı, yürüyüş, esneme, göz yorgunluğu, " +
+      "sabah/akşam rutinleri (tıbbi tavsiye değil, genel bilgi)",
   },
   {
-    name: "Bahçe & Bitki Bakımı",
-    brief: "sulama, saksı, toprak, gübre, budama, iç mekan bitkileri",
-  },
-  {
-    name: "Seyahat & Bavul Hazırlama",
-    brief: "bavul düzeni, uçak kuralları, seyahat hazırlığı",
-  },
-  {
-    name: "Kişisel Bakım & Güzellik",
-    brief: "cilt, saç, tıraş, diş bakımı, ürün kullanımı",
-  },
-  {
-    name: "Ofis & Verimlilik",
-    brief: "masa düzeni, klavye kısayolları, zaman yönetimi, e-posta",
-  },
-  {
-    name: "Elektronik Cihaz & Şarj Aletleri Bakımı",
-    brief: "şarj alışkanlıkları, kablo bakımı, cihaz ömrü, ısınma",
-  },
-  {
-    name: "Ev Güvenliği & Acil Durum Bilgisi",
+    name: "Spor & Egzersiz",
     brief:
-      "evdeki güvenlik ve acil durumlar: elektrik tesisatı ve sigorta, uzatma kablosu ve priz yükü, " +
-      "doğalgaz ve kombi, su kaçağı ve vana kapatma, yangın söndürücü ve duman dedektörü, " +
-      "çamaşır/bulaşık makinesi hortumu, tüp ve ocak güvenliği, deprem hazırlığı. " +
-      "Çoğu insanın farkında olmadan risk aldığı, tamirat bilgisiyle iç içe geçen konular seç",
+      "koşu, ağırlık, esneme, ısınma, spor ayakkabısı, antrenman öncesi/sonrası, " +
+      "sakatlanmadan çalışma",
+  },
+  {
+    name: "Mutfak & Gıda Saklama",
+    brief:
+      "buzdolabında saklama, tazelik, pişirme, tencere-tava, kahve ve çay, ekmek, " +
+      "sebze-meyve, gıda güvenliği",
+  },
+  {
+    name: "Çamaşır & Ev Temizliği",
+    brief:
+      "çamaşır makinesi, yıkama programı, kurutma, ütü, leke, bulaşık, süpürge, " +
+      "havlu ve nevresim bakımı",
+  },
+  {
+    name: "Para & Alışveriş",
+    brief:
+      "market alışverişi, fatura, kredi kartı, abonelikler, tasarruf, fiyat karşılaştırma, " +
+      "cüzdan ve nakit yönetimi",
+  },
+  {
+    name: "Seyahat & Bavul",
+    brief:
+      "bavul hazırlama, uçak kuralları, otel, sırt çantası, yolculukta güvenlik, " +
+      "araçla uzun yol",
+  },
+  {
+    name: "Ev Güvenliği & Acil Durum",
+    brief:
+      "evde güvenlik: uzatma kablosu ve priz yükü, yangın söndürücü, duman dedektörü, " +
+      "asansör, merdiven, kapı-kilit, su kaçağı, deprem hazırlığı, ilk yardım. " +
+      "Görsel karşılığı olan somut nesneler üzerinden anlat",
+  },
+  {
+    name: "Ofis & Masa Başı",
+    brief:
+      "masa düzeni, ekran yüksekliği, sandalye, aydınlatma, klavye ve fare, " +
+      "uzun süre oturmanın etkileri",
   },
 ];
 
@@ -370,6 +358,19 @@ ${
 Bu kategoride şunlar işlenir: ${category.brief}.
 Bu kategori içinde, geniş kitleye hitap eden, şaşırtıcı ve pratik, spesifik bir alt konu bul.
 
+GÖRSEL BULUNABİLİRLİK ŞARTI (bu kural ihlal edilirse video görsel olarak çöker):
+Seçtiğin konunun ana nesnesi, ücretsiz stok video kütüphanelerinde (Pexels/Pixabay)
+BOLCA bulunan bir şey olmalı. Bu kütüphaneler uluslararası; Türkiye'ye özgü ya da
+çok teknik nesnelerin karşılığı YOK.
+  Karşılığı VAR  : araba, lastik, direksiyon, far, telefon, şarj kablosu, laptop,
+                   buzdolabı, çamaşır makinesi, bulaşık, süpürge, yatak, su bardağı,
+                   koşu ayakkabısı, spor salonu, bavul, market arabası, kredi kartı,
+                   priz, uzatma kablosu, yangın söndürücü, merdiven, ofis masası
+  Karşılığı YOK  : kombi, petek, silikon, derz, dübel, sigorta kutusu, doğalgaz
+                   vanası, alçı, şofben, kalorifer peteği
+Karşılığı olmayan bir nesne seçersen sahnelerin hepsi aynı jenerik klibe düşüyor
+ve video tek düze görünüyor. Böyle bir konu seçme.
+
 Bu kategoride DAHA ÖNCE İŞLENMİŞ konular. Bunları ne aynen ne de başka kelimelerle
 tekrar etme; aynı nesne/eylem etrafında dönen bir varyasyon da sayılır, tamamen
 başka bir alt konuya geç:
@@ -460,6 +461,20 @@ arka plan videosuna yol açıyor):
   "installing new gas hose" ya da "checking gas leak with soap" gibi bir klip YOKTUR,
   ama "gas hose" ve "gas pipe" vardır. Uzun ve cümle gibi yazılmış terimler hiçbir
   sonuç getirmiyor ve sahne genel bir yedek klibe düşüyor.
+  Aşağıdaki dağarcık stok kütüphanelerinde BOL; terimleri mümkün olduğunca
+  bunların içinden ya da bunlara yakın seç:
+    araba: "car tire", "steering wheel", "car headlight", "windshield wiper",
+      "car engine", "driving rain", "car dashboard", "parking car"
+    teknoloji: "smartphone screen", "charging phone", "laptop keyboard",
+      "usb cable", "wifi router", "headphones", "phone battery"
+    ev: "washing machine", "refrigerator open", "vacuum cleaner", "dishes sink",
+      "laundry basket", "power outlet", "extension cord", "fire extinguisher"
+    mutfak: "cutting vegetables", "cooking pan", "coffee cup", "fresh bread",
+      "kitchen counter", "food storage"
+    sağlık/spor: "person sleeping", "drinking water", "running shoes",
+      "gym workout", "stretching exercise", "office desk", "sitting posture"
+    para/seyahat: "counting money", "credit card", "supermarket shelf",
+      "shopping cart", "packing suitcase", "airport luggage"
   Terimler stok video kütüphanelerinde GERÇEKTEN bulunabilecek, yaygın sahneler olsun;
   aşırı spesifik/sinematik tarifler ("hand rolling lemon counterclockwise") yazma.
   Her terimin içinde konunun ana nesnesi geçsin.

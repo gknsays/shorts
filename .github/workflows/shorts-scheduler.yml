@@ -140,7 +140,7 @@ jobs:
           # Repo > Settings > Secrets and variables > Actions > Variables
           # altında CATEGORY_FILTER tanımlarsan o kullanılır; yoksa aşağıdaki
           # varsayılan geçerli olur.
-          CATEGORY_FILTER: ${{ vars.CATEGORY_FILTER || 'Ev Güvenliği & Acil Durum Bilgisi,Araba Bakımı & Sürüş,Teknoloji & Telefon Kullanımı' }}
+          CATEGORY_FILTER: ${{ vars.CATEGORY_FILTER || 'Araba Bakımı & Sürüş,Telefon & Teknoloji Kullanımı,Ev Güvenliği & Acil Durum' }}
           CHANNEL_TAGS: ${{ vars.CHANNEL_TAGS || 'pratik bilgi,hayat kurtaran bilgi,bilmen gerekenler' }}
         run: node scripts/run.mjs
 
