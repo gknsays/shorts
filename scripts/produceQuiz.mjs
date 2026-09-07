@@ -153,8 +153,13 @@ function buildPrompt(gecmisSorular) {
     "- TAM OLARAK 3 şık. Her şık EN FAZLA 4 KELİME.",
     "- Şıklar birbirine yakın uzunlukta olsun; belirgin şekilde uzun olan şık",
     "  cevabı ele veriyor.",
-    "- \"Hiçbiri\", \"Hepsi\" gibi kaçamak şık YASAK. İzleyici tahmin edecek",
-    "  somut bir şey bulamıyor ve cevap tatmin etmiyor.",
+    "- \"Hiçbiri\", \"Hepsi\", \"Hiçbirine...\", \"Fark etmez\" gibi kaçamak şık",
+    "  YASAK. İzleyici tahmin edecek somut bir şey bulamıyor, cevap tatmin",
+    "  etmiyor. Her şık SOMUT bir seçenek olsun.",
+    "- ŞIKLAR SORUYU DİLBİLGİSİ OLARAK DA CEVAPLASIN. Soru \"nereye yazılmalı\"",
+    "  diye soruyorsa şıklar bir YER bildirmeli; \"hafızada tutulmalı\" cevabı",
+    "  soruyla uyuşmuyor ve izleyici okurken takılıyor. Soruyu şıkka göre",
+    "  yeniden yaz: \"Kredi kartı şifresi nerede saklanmalı?\"",
     "",
     "ANLATIM (seslendirilecek):",
     '- "soru_anlatim": sorunun sesli okunacak hali. Soruyla aynı olabilir ama',
@@ -247,7 +252,10 @@ function dogrula(q) {
 
   // Şıklardan biri "hiçbiri" / "hepsi" ise soru zayıflıyor: izleyici tahmin
   // edecek somut bir şey bulamıyor ve cevap tatmin etmiyor.
-  const kacamak = /^(hiçbiri|hicbiri|hepsi|hiçbir[ıi]|bilmiyorum)$/i;
+  // Birebir eşleşme yetersizdi: "Hiçbirine basılmamalı", "Hepsi doğru" gibi
+  // çekimli haller filtreyi geçiyordu. Kelime BAŞLANGICINA bakıyoruz.
+  const kacamak =
+    /^\s*(hi[çc]bir|hepsi|t[üu]m[üu]|bilmiyorum|fark etmez|ikisi de)/i;
   sorular.forEach((s, i) => {
     if ((s.secenekler ?? []).some((x) => kacamak.test(String(x).trim()))) {
       hatalar.push(`soru ${i + 1}: "hiçbiri/hepsi" gibi kaçamak şık kullanılmış`);
