@@ -226,6 +226,16 @@ const HookCard: React.FC<{ text: string }> = ({ text }) => {
   const drift = interpolate(frame, [0, durationInFrames], [1, 1.05], {
     extrapolateRight: "clamp",
   });
+  // Karartma sabit kalırsa feed'in en kritik ilk saniyelerinde arka plandaki
+  // hareket bastırılıyor ve kare "durağan" görünüyor - kaydırmayı tetikleyen
+  // şey tam olarak bu. Yazı okunacak kontrastı kurduktan sonra karartmayı
+  // açıyoruz: metin okunur kalırken alttaki video görünür hale geliyor.
+  const scrimOpacity = interpolate(
+    frame,
+    [0, Math.round(durationInFrames * 0.35), durationInFrames],
+    [0.42, 0.34, 0.16],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
 
   return (
     <AbsoluteFill
@@ -236,7 +246,7 @@ const HookCard: React.FC<{ text: string }> = ({ text }) => {
         opacity,
       }}
     >
-      <AbsoluteFill style={{ background: "rgba(0,0,0,0.38)" }} />
+      <AbsoluteFill style={{ background: `rgba(0,0,0,${scrimOpacity})` }} />
       <div
         style={{
           fontFamily: "Montserrat, Arial, sans-serif",

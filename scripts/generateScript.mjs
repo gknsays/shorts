@@ -361,7 +361,7 @@ async function main() {
   const buildPrompt = () => `
 Sen Türkçe konuşan bir YouTube Shorts kanalı için içerik yazarısın.
 Kanalın formatı: "Günlük hayatta YANLIŞ yapılan bir işi gösterip, ardından DOĞRUSUNU"
-anlatan 30-45 saniyelik kısa bir seslendirme metni.
+anlatan 20-28 saniyelik kısa bir seslendirme metni.
 
 ${
   cliTopic
@@ -413,8 +413,12 @@ ANLATIM TARZI (hook'tan sonraki bölümler için):
 - Kısa cümleler ve akıcı bir ritim korunsun, Shorts'a uygun olsun.
 
 Kurallar:
-- "yanlis_metni" 2-3 cümle, "dogru_metni" 2-3 cümle. hook + yanlış + doğru toplamı
-  75-110 kelime civarı olsun (30-45 saniye).
+- "yanlis_metni" 2 cümle, "dogru_metni" 2 cümle. hook + yanlış + doğru toplamı
+  55-70 kelime civarı olsun (20-28 saniye). BU SINIRI AŞMA.
+  Neden bu kadar kısa: Shorts'ta en güçlü sıralama sinyali, videonun sonuna kadar
+  izlenip başa dönmesidir (loop). 25 saniyelik video tamamlanıp döner; 45 saniyelik
+  video ortasında bırakılır. Anlatımı sıkıştır: süsleme ve dolgu cümlesi at,
+  bilgiyi bırak.
 BAŞLIK (title) KURALLARI - feed'de tıklanmayı bu belirler:
 - EN FAZLA 50 KARAKTER. Shorts feed'inde başlık bu uzunluktan sonra kırpılıyor;
   vaadin kırpılan kısımda kalması tıklamayı doğrudan öldürür.
@@ -452,9 +456,20 @@ arka plan videosuna yol açıyor):
   [2] ve [3] EN KRİTİK OLANLAR: izleyici videoyu doğru yöntemi görmek için izliyor.
   Bu ikisi mutlaka DOĞRU yöntemin uygulandığı eylemi betimlesin; "home repair diy",
   "person working" gibi jenerik sahneler YAZMA - bunlar konuyu göstermez.
+  HER TERİM EN FAZLA 3 KELİME OLSUN. Bu sınır kritik: stok kütüphanelerinde
+  "installing new gas hose" ya da "checking gas leak with soap" gibi bir klip YOKTUR,
+  ama "gas hose" ve "gas pipe" vardır. Uzun ve cümle gibi yazılmış terimler hiçbir
+  sonuç getirmiyor ve sahne genel bir yedek klibe düşüyor.
   Terimler stok video kütüphanelerinde GERÇEKTEN bulunabilecek, yaygın sahneler olsun;
   aşırı spesifik/sinematik tarifler ("hand rolling lemon counterclockwise") yazma.
   Her terimin içinde konunun ana nesnesi geçsin.
+- "stok_yedek_terimleri": TAM OLARAK 5 elemanlı İngilizce dizi; her eleman
+  "stok_arama_terimleri" içindeki AYNI SIRADAKİ terimin daha genel yedeği olsun.
+  Her biri 1-2 kelime ve stok kütüphanelerinde kesinlikle sonuç veren yaygın bir
+  sahne olmalı. Yine de konunun nesnesini taşımalı: "gas hose" için yedek
+  "gas pipe" veya "kitchen stove" olur, "person working" OLMAZ.
+  Bu alan, spesifik terim tutmadığında o sahnenin kendi yedeğine düşmesini sağlar;
+  yoksa tüm tutmayan sahneler aynı klibi paylaşıp video tekrara düşüyor.
 - "stok_zorunlu_kelimeler": 2-4 elemanlı İngilizce TEK KELİMELİK isim dizisi. Bunlar
   konunun görsel çekirdeğidir; bir stok klip bunlardan HİÇBİRİNİ içermiyorsa o klip
   konuyla alakasızdır ve kullanılmayacaktır. Geniş değil, somut nesne/mekan adı ver.
@@ -464,9 +479,14 @@ arka plan videosuna yol açıyor):
 - "stok_genel_terim": 2 kelimelik İngilizce yedek sorgu. Spesifik terimler sonuç
   vermezse bu kullanılır, ama yine konuyu temsil etmeli (ör. "electrical socket",
   "bathroom tiles", "car tire").
-- "cta_metni": videonun EN SONUNDA söylenecek, sıcak ve samimi tek bir Türkçe cümle
-  (8-14 kelime). Mutlaka "beğen" ve "abone ol" fiillerini (veya eş anlamlılarını) içersin.
-  Her seferinde farklı kelimelerle yaz, kalıplaşmış cümleyi tekrar etme.
+- "cta_metni": videonun EN SONUNDA söylenecek, sıcak ve samimi tek bir Türkçe cümle.
+  EN FAZLA 7 KELİME. Mutlaka "beğen" ve "abone ol" fiillerini (veya eş anlamlılarını)
+  içersin. Her seferinde farklı kelimelerle yaz, kalıplaşmış cümleyi tekrar etme.
+  Neden bu kadar kısa: kapanış anonsu izleyicinin kaydırdığı yerdir. 14 kelimelik
+  bir CTA 4 saniye sürüyor ve 26 saniyelik videonun altıda birini kaplıyor; bu
+  süre boyunca izleyici zaten gitmiş oluyor, ama izlenme oranı hesabına dahil
+  edildiği için ortalama tutulmayı aşağı çekiyor. Kısa CTA hem oranı korur hem
+  videonun başa dönmesini (loop) kolaylaştırır.
 
 SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ver:
 {
@@ -481,6 +501,7 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
   "dogru_metni": "...",
   "cta_metni": "...",
   "stok_arama_terimleri": ["...", "...", "...", "...", "..."],
+  "stok_yedek_terimleri": ["...", "...", "...", "...", "..."],
   "stok_zorunlu_kelimeler": ["...", "...", "..."],
   "stok_genel_terim": "..."
 }
@@ -536,6 +557,22 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
   }
   if (!parsed.hook_ekran_metni) {
     parsed.hook_ekran_metni = parsed.title || parsed.topic || "";
+  }
+
+  // Süre denetimi: model kelime sınırını aşarsa video loop bandının dışına
+  // çıkıyor ve tamamlanma oranı düşüyor. Sessizce geçmesin.
+  const kelimeSay = (t) => String(t || "").trim().split(/\s+/).filter(Boolean).length;
+  const konusmaKelime =
+    kelimeSay(parsed.hook_metni) +
+    kelimeSay(parsed.yanlis_metni) +
+    kelimeSay(parsed.dogru_metni);
+  if (konusmaKelime > 80) {
+    console.warn(
+      `⚠️  Metin ${konusmaKelime} kelime (hedef 55-70, ~20-28 sn). ` +
+        "Video loop bandının dışına çıkabilir."
+    );
+  } else {
+    console.log(`   Metin: ${konusmaKelime} kelime (~${Math.round(konusmaKelime / 2.6)} sn)`);
   }
 
   if (parsed.title && parsed.title.length > 55) {

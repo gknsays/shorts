@@ -98,6 +98,19 @@ async function searchPixabay(query, orientation) {
     );
 }
 
+// Aynı sorgu birden fazla sahnede deneniyor (yedek terimler ortak). Her
+// seferinde API'ye gitmek hem yavaş hem de Pexels'in saatlik kotasını
+// gereksiz tüketiyor. Süreç içi önbellek bunu ortadan kaldırıyor.
+const searchCache = new Map();
+
+async function cachedSearch(fn, name, query, orientation) {
+  const key = name + "|" + query + "|" + (orientation || "any");
+  if (searchCache.has(key)) return searchCache.get(key);
+  const results = await fn(query, orientation);
+  searchCache.set(key, results);
+  return results;
+}
+
 // --- Alaka denetimi -------------------------------------------------------
 
 const STOPWORDS = new Set([
@@ -140,12 +153,28 @@ function matchedRequiredWord(video, requiredWords) {
   return requiredWords.find((w) => wordMatches(video.tokens, w)) ?? null;
 }
 
-function relevanceRatio(query, video) {
+function matchedWordCount(query, video) {
   const words = queryWords(query);
-  if (words.length === 0) return 0;
   let matched = 0;
   for (const w of words) if (wordMatches(video.tokens, w)) matched++;
-  return matched / words.length;
+  return { matched, total: words.length };
+}
+
+// Kaç kelimenin eşleşmesi gerektiği, sorgunun uzunluğuna göre değişir.
+//
+// Önceden sabit bir oran (%50) kullanılıyordu ve bu uzun sorguları haksız yere
+// cezalandırıyordu: "checking gas leak with soap" için 4 kelimenin 2'si
+// istenirken, stok klip başlıkları genelde 4-6 kelime olduğu için bu eşiğe
+// ulaşmak neredeyse imkânsızdı. Sonuçta spesifik aramaların tamamı düşüp her
+// sahne aynı genel yedek klibe kalıyordu.
+//
+// Yeni kural: 1-2 kelimelik sorgularda kelimelerin HEPSİ eşleşmeli (kısa sorgu
+// zaten geneldir, gevşetirsek konu dışına çıkarız), 3+ kelimede en az 2'si
+// yeterli. Bu, dokümandaki karşı örneği de elemeye devam ediyor: "electric
+// drill wall" sorgusuna dönen Çin Seddi klibi yalnız "wall"u karşıladığı için
+// 1 < 2 ile reddediliyor.
+function requiredMatchCount(wordTotal) {
+  return wordTotal <= 2 ? wordTotal : 2;
 }
 
 // Bir adayın kabul edilmesi için İKİ koşulu birden sağlaması gerekir:
@@ -161,21 +190,33 @@ function relevanceRatio(query, video) {
 //
 // Tek başına (b) de yetmiyor: sorgu genel yedek terime ("home repair diy")
 // düştüğünde konuyla ilgisiz bir klip yüksek oran alabiliyor.
-const MIN_RELEVANCE = 0.5;
-
 function pickBestCandidate(query, videos, usedKeys, requiredWords) {
   const candidates = videos
     .filter((v) => !usedKeys.has(v.key))
-    .map((v) => ({
-      video: v,
-      matched: matchedRequiredWord(v, requiredWords),
-      ratio: relevanceRatio(query, v),
-    }))
-    .filter((c) => c.matched !== null && c.ratio >= MIN_RELEVANCE);
+    .map((v) => {
+      const { matched, total } = matchedWordCount(query, v);
+      return {
+        video: v,
+        matchedWord: matchedRequiredWord(v, requiredWords),
+        matched,
+        total,
+        ratio: total ? matched / total : 0,
+      };
+    })
+    .filter(
+      (c) =>
+        c.matchedWord !== null &&
+        c.total > 0 &&
+        c.matched >= requiredMatchCount(c.total)
+    );
 
   if (candidates.length === 0) return null;
 
-  return candidates.sort((a, b) => b.ratio - a.ratio)[0];
+  // Önce mutlak eşleşme sayısı, sonra oran: 5 kelimenin 3'ünü karşılayan klip,
+  // 2 kelimenin 2'sini karşılayandan daha isabetlidir.
+  return candidates.sort(
+    (a, b) => b.matched - a.matched || b.ratio - a.ratio
+  )[0];
 }
 
 function pickBestFile(video) {
@@ -190,37 +231,78 @@ function pickBestFile(video) {
   return [...video.files].sort((a, b) => b.height - a.height)[0];
 }
 
-// Bir sahne için sırayla denenecek aramalar. Sorgu genişlese bile sert filtre
-// her adımda uygulandığı için konu dışına çıkılmaz.
-function buildAttempts(specificQuery, broadQuery) {
-  const attempts = [
-    { fn: searchPexels, name: "Pexels", query: specificQuery, orientation: "portrait" },
-    { fn: searchPixabay, name: "Pixabay", query: specificQuery, orientation: "portrait" },
-    { fn: searchPexels, name: "Pexels", query: specificQuery, orientation: null },
-    { fn: searchPixabay, name: "Pixabay", query: specificQuery, orientation: null },
+// Uzun ve spesifik sorgular stok kütüphanelerinde karşılık bulmuyor:
+// "installing new gas hose" diye bir klip yok, ama "gas hose" var. Eskiden
+// böyle bir sorgu tamamen düşüyor ve sahne, tüm sahneler için ortak olan tek
+// bir genel yedek terime kalıyordu - bu yüzden aynı klip birkaç sahnede
+// tekrarlanıyor ve anlatımla görüntü uyuşmuyordu.
+//
+// Çözüm: sorguyu kademeli daraltmak. Sert konu filtresi her adımda aynen
+// uygulandığı için daralma, konu dışına çıkma riski yaratmıyor.
+function queryVariants(query) {
+  const words = queryWords(query);
+  const variants = [query];
+
+  if (words.length >= 4) variants.push(words.slice(0, 3).join(" "));
+  // Son iki kelime genelde nesnenin kendisidir ("installing new gas hose"
+  // -> "gas hose"), ilk iki kelime ise eylemi taşır.
+  if (words.length >= 3) variants.push(words.slice(-2).join(" "));
+  if (words.length >= 3) variants.push(words.slice(0, 2).join(" "));
+
+  return [...new Set(variants.filter(Boolean))];
+}
+
+// Bir sahne için sırayla denenecek aramalar: önce sorgunun kendisi, sonra
+// daraltılmış halleri, sonra o sahneye ait yedek terim, en sonda kanal geneli
+// için üretilen genel terim.
+function buildAttempts(specificQuery, sceneFallback, broadQuery) {
+  const ladder = [
+    ...queryVariants(specificQuery),
+    sceneFallback,
+    broadQuery,
   ];
 
-  if (broadQuery && broadQuery !== specificQuery) {
+  const attempts = [];
+  const seen = new Set();
+
+  for (const query of ladder) {
+    if (!query || seen.has(query)) continue;
+    seen.add(query);
     attempts.push(
-      { fn: searchPexels, name: "Pexels", query: broadQuery, orientation: "portrait" },
-      { fn: searchPixabay, name: "Pixabay", query: broadQuery, orientation: "portrait" },
-      { fn: searchPexels, name: "Pexels", query: broadQuery, orientation: null },
-      { fn: searchPixabay, name: "Pixabay", query: broadQuery, orientation: null }
+      { fn: searchPexels, name: "Pexels", query, orientation: "portrait" },
+      { fn: searchPixabay, name: "Pixabay", query, orientation: "portrait" },
+      { fn: searchPexels, name: "Pexels", query, orientation: null }
     );
+  }
+
+  // Son çare: en geniş sorguda Pixabay'i yön kısıtı olmadan da dene.
+  const sonuncu = [...seen].pop();
+  if (sonuncu) {
+    attempts.push({
+      fn: searchPixabay,
+      name: "Pixabay",
+      query: sonuncu,
+      orientation: null,
+    });
   }
 
   return attempts;
 }
 
-async function findClip(specificQuery, broadQuery, usedKeys, requiredWords) {
-  for (const attempt of buildAttempts(specificQuery, broadQuery)) {
+async function findClip(specificQuery, sceneFallback, broadQuery, usedKeys, requiredWords) {
+  for (const attempt of buildAttempts(specificQuery, sceneFallback, broadQuery)) {
     const label = `${attempt.name} "${attempt.query}"${
       attempt.orientation ? " [dikey]" : " [her yön]"
     }`;
 
     let results = [];
     try {
-      results = await attempt.fn(attempt.query, attempt.orientation);
+      results = await cachedSearch(
+        attempt.fn,
+        attempt.name,
+        attempt.query,
+        attempt.orientation
+      );
     } catch (err) {
       console.log(`      ! ${label} → ${err.message}`);
       continue;
@@ -237,9 +319,10 @@ async function findClip(specificQuery, broadQuery, usedKeys, requiredWords) {
 
     if (candidate) {
       console.log(
-        `      ✓ ${label} → "${candidate.matched}" eşleşti, alaka %${Math.round(
-          candidate.ratio * 100
-        )}`
+        `      ✓ ${label} → "${candidate.matchedWord}" eşleşti, ` +
+          `${candidate.matched}/${candidate.total} kelime (alaka %${Math.round(
+            candidate.ratio * 100
+          )})`
       );
       return candidate.video;
     }
@@ -288,6 +371,13 @@ async function main() {
     .map((w) => String(w).toLowerCase().trim())
     .filter(Boolean);
 
+  // Sahne başına yedek terim: spesifik sorgu tutmadığında o sahnenin KENDİ
+  // yedeğine düşülür. Eskiden tek bir genel terim vardı ve tutmayan bütün
+  // sahneler aynı klibe düşüyordu; anlatım değişirken görüntü sabit kalıyordu.
+  const sceneFallbacks = Array.isArray(metadata.stok_yedek_terimleri)
+    ? metadata.stok_yedek_terimleri.map((t) => String(t || "").trim())
+    : [];
+
   const broadTerm =
     metadata.stok_genel_terim || queryWords(terms[0]).slice(0, 2).join(" ") || "";
 
@@ -306,6 +396,9 @@ async function main() {
 
   console.log(`${terms.length} klip aranacak.`);
   console.log(`  Konu filtresi (en az biri eşleşmeli): ${requiredWords.join(", ")}`);
+  if (sceneFallbacks.length > 0) {
+    console.log(`  Sahne yedekleri: ${sceneFallbacks.join(" | ")}`);
+  }
   console.log(`  Genel yedek terim: "${broadTerm}"`);
 
   fs.mkdirSync(VIDEO_DIR, { recursive: true });
@@ -316,7 +409,13 @@ async function main() {
 
   for (let i = 0; i < terms.length; i++) {
     console.log(`  [${i + 1}] Aranıyor: "${terms[i]}"`);
-    const video = await findClip(terms[i], broadTerm, usedKeys, requiredWords);
+    const video = await findClip(
+      terms[i],
+      sceneFallbacks[i] || null,
+      broadTerm,
+      usedKeys,
+      requiredWords
+    );
 
     if (video) {
       usedKeys.add(video.key);
