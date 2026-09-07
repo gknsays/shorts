@@ -135,8 +135,8 @@ jobs:
           # Repo > Settings > Secrets and variables > Actions > Variables
           # altında CATEGORY_FILTER tanımlarsan o kullanılır; yoksa aşağıdaki
           # varsayılan geçerli olur.
-          CATEGORY_FILTER: ${{ vars.CATEGORY_FILTER || 'Ev Tamiratı & Tadilat,Araba Bakımı & Sürüş,Ev Güvenliği & Acil Durum Bilgisi' }}
-          CHANNEL_TAGS: ${{ vars.CHANNEL_TAGS || 'kendin yap,ustadan tüyo,pratik bilgiler' }}
+          CATEGORY_FILTER: ${{ vars.CATEGORY_FILTER || 'Uzay & Evren Gizemleri,Çözülememiş Tarihi Gizemler,Okyanus & Derin Deniz' }}
+          CHANNEL_TAGS: ${{ vars.CHANNEL_TAGS || 'gizem,açıklanamayan olaylar,uzay gizemleri' }}
         run: node scripts/run.mjs
 
       - name: Üretilen videoyu artifact olarak sakla (yedek/kontrol amaçlı)

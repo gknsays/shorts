@@ -17,7 +17,7 @@ import { Captions } from "./Captions";
 import { groupWordsIntoLines, WordTiming } from "./captionUtils";
 
 export type PhaseMarker = {
-  label: string; // "YANLIŞ" | "DOĞRU" | serbest metin
+  label: string; // "OLAY" | "AÇIKLANAMAYAN" | serbest metin
   color: string; // rozet rengi
   startWordIndex: number; // bu fazın kaçıncı kelimeden başladığı
   badge?: boolean; // sağ üstteki rozet gösterilsin mi (varsayılan: evet)
@@ -30,7 +30,7 @@ export type BackgroundClip = {
 };
 
 // Bir klibin zaman çizelgesinde hangi aralığı kaplayacağı. Aralıklar
-// scripts/render.mjs tarafından anlatım bölümlerine (KANCA/YANLIŞ/DOĞRU/KAPANIŞ)
+// scripts/render.mjs tarafından anlatım bölümlerine (KANCA/OLAY/AÇIKLANAMAYAN/KAPANIŞ)
 // göre hesaplanır; böylece "doğru yöntem" için indirilen klip gerçekten DOĞRU
 // bölümünde görünür.
 export type BackgroundScene = BackgroundClip & {
@@ -411,7 +411,7 @@ const PhaseFlashContent: React.FC<{ label: string; color: string }> = ({
   );
 };
 
-// Her faz (HOOK -> YANLIŞ -> DOĞRU -> ABONE OL) değişiminde ekranın ortasında
+// Her faz (HOOK -> OLAY -> AÇIKLANAMAYAN -> ABONE OL) değişiminde ekranın ortasında
 // büyükçe yanıp sönen, ses efektli bir "flaş" gösterir - videoya vurgu/enerji katar.
 const PhaseFlash: React.FC<{ phases: PhaseMarker[]; words: WordTiming[] }> = ({
   phases,

@@ -1,7 +1,7 @@
 // scripts/generateScript.mjs
 // Google Gemini API'yi (ÜCRETSİZ katman, kredi kartı gerekmez) kullanarak:
-//  - Eğer TOPIC verilmemişse otomatik bir "günlük hayatta yanlış yapılan iş" konusu seçer
-//  - HOOK / YANLIŞ / DOĞRU / CTA formatında kısa bir Türkçe seslendirme metni yazar
+//  - Eğer TOPIC verilmemişse otomatik bir "açıklanamayan olay" konusu seçer
+//  - HOOK / OLAY / AÇIKLANAMAYAN / CTA formatında kısa bir Türkçe seslendirme metni yazar
 //  - YouTube başlığı, açıklaması ve etiketlerini üretir
 // Çıktı: data/metadata.json
 
@@ -30,78 +30,54 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 // kategoriye ait sayılması için (tekrar kontrolü bozulmasın diye).
 const ALL_CATEGORIES = [
   {
-    name: "Mutfak & Yemek Hazırlama",
+    name: "Uzay & Evren Gizemleri",
     brief:
-      "yemek pişirme teknikleri, malzeme saklama, mutfak aleti kullanımı, tazelik ve gıda güvenliği",
+      "uzayda açıklanamayan gözlemler: tuhaf radyo sinyalleri, kayıp sondalar, " +
+      "anlaşılamayan gök cisimleri, kara delikler, Ay ve Mars'ta görülen anormallikler, " +
+      "yıldızların beklenmedik davranışı, uzay görevlerinde yaşanan sıra dışı olaylar. " +
+      "Bilimsel olarak kaydedilmiş ama tam açıklanamamış olayları seç",
   },
   {
-    name: "Ev Tamiratı & Tadilat",
-    aliases: ["Ev Tamiratı & Basit DIY"],
+    name: "Çözülememiş Tarihi Gizemler",
     brief:
-      "ev tadilatı ve tamirat işleri: boya-badana, alçı/duvar onarımı, fayans ve derz, silikon çekme, " +
-      "musluk/sifon/tesisat, kapı-pencere ayarı, dübel-vida-matkap kullanımı, elektrik prizi ve anahtar, " +
-      "parke/laminat, rutubet ve küf. Amatörün ustadan öğreneceği, işi baştan doğru yapmayı gösteren " +
-      "öğretici konular seç; usta çağırmadan çözülebilen ama yanlış yapıldığında pahalıya patlayan işler ideal",
+      "tarihte kaydedilmiş ama açıklanamayan olaylar: kayıp uygarlıklar, çözülemeyen " +
+      "şifreli metinler, ortadan kaybolan ordular ve kafileler, anlaşılamayan haritalar, " +
+      "mezarı bulunamayan hükümdarlar, aniden terk edilmiş şehirler",
   },
   {
-    name: "Ev Temizliği",
-    brief: "temizlik ürünleri, yüzey bakımı, leke çıkarma, beyaz eşya temizliği",
-  },
-  {
-    name: "Teknoloji & Telefon Kullanımı",
-    brief: "telefon/bilgisayar ayarları, batarya, depolama, güvenlik, internet",
-  },
-  {
-    name: "Sağlık & Günlük Alışkanlıklar",
-    brief: "uyku, duruş, su tüketimi, günlük rutinler (tıbbi tavsiye değil, genel bilgi)",
-  },
-  {
-    name: "Para & Bütçe Yönetimi",
-    brief: "fatura, alışveriş, tasarruf, abonelik yönetimi",
-  },
-  {
-    name: "Ev Düzeni & Depolama",
-    brief: "dolap düzeni, saklama kapları, küçük alan kullanımı",
-  },
-  {
-    name: "Çamaşır & Kıyafet Bakımı",
-    brief: "yıkama programları, kumaş bakımı, kurutma, ütü, leke",
-  },
-  {
-    name: "Araba Bakımı & Sürüş",
+    name: "Okyanus & Derin Deniz",
     brief:
-      "araç bakımı ve sürüş: lastik basıncı ve diş derinliği, motor yağı ve filtre, akü ve şarj, " +
-      "fren balatası, cam suyu ve silecek, klima ve polen filtresi, rölanti, debriyaj ve vites " +
-      "kullanımı, yakıt tasarrufu, kış/yaz hazırlığı, yıkama ve boya bakımı. Servise gitmeden " +
-      "yapılabilen ama yanlış yapıldığında pahalı arızaya yol açan işler öncelikli",
+      "okyanusun keşfedilmemiş tarafı: derinlerden gelen kaydedilmiş sesler, iz " +
+      "bırakmadan kaybolan gemiler, derin deniz canlıları, haritalanmamış bölgeler, " +
+      "su altında bulunan yapılar, batıklar",
   },
   {
-    name: "Bahçe & Bitki Bakımı",
-    brief: "sulama, saksı, toprak, gübre, budama, iç mekan bitkileri",
-  },
-  {
-    name: "Seyahat & Bavul Hazırlama",
-    brief: "bavul düzeni, uçak kuralları, seyahat hazırlığı",
-  },
-  {
-    name: "Kişisel Bakım & Güzellik",
-    brief: "cilt, saç, tıraş, diş bakımı, ürün kullanımı",
-  },
-  {
-    name: "Ofis & Verimlilik",
-    brief: "masa düzeni, klavye kısayolları, zaman yönetimi, e-posta",
-  },
-  {
-    name: "Elektronik Cihaz & Şarj Aletleri Bakımı",
-    brief: "şarj alışkanlıkları, kablo bakımı, cihaz ömrü, ısınma",
-  },
-  {
-    name: "Ev Güvenliği & Acil Durum Bilgisi",
+    name: "Antik Teknoloji & Anlaşılamayan Eserler",
     brief:
-      "evdeki güvenlik ve acil durumlar: elektrik tesisatı ve sigorta, uzatma kablosu ve priz yükü, " +
-      "doğalgaz ve kombi, su kaçağı ve vana kapatma, yangın söndürücü ve duman dedektörü, " +
-      "çamaşır/bulaşık makinesi hortumu, tüp ve ocak güvenliği, deprem hazırlığı. " +
-      "Çoğu insanın farkında olmadan risk aldığı, tamirat bilgisiyle iç içe geçen konular seç",
+      "çağının çok ötesinde görünen buluntular: nasıl yapıldığı bilinmeyen yapılar, " +
+      "işlevi çözülemeyen aletler, imkânsız görünen taş işçiliği, döneminde olmaması " +
+      "gereken hassasiyetteki nesneler",
+  },
+  {
+    name: "Dünyanın Tuhaf & Yasak Yerleri",
+    brief:
+      "girilmesi yasak bölgeler, terk edilmiş şehirler, açıklanamayan coğrafi " +
+      "anormallikler, pusulanın şaştığı alanlar, kimsenin yaşamadığı adalar, " +
+      "kapalı tutulan tesisler",
+  },
+  {
+    name: "Açıklanamayan Olaylar & Kayboluşlar",
+    brief:
+      "belgelenmiş kayboluşlar ve tekrar eden tuhaf olaylar: iz bırakmadan yok olan " +
+      "insanlar ve uçaklar, çözülemeyen vakalar, yıllarca tekrarlanan gizemli sinyaller, " +
+      "kimliği belirlenemeyen kayıtlar",
+  },
+  {
+    name: "Doğanın Açıklanamayanları",
+    brief:
+      "doğada gözlemlenen ama tam açıklanamayan olaylar: tuhaf ışıklar, hayvanların " +
+      "anlaşılamayan davranışları, olağandışı hava olayları, renk değiştiren göller, " +
+      "kendiliğinden hareket eden kayalar",
   },
 ];
 
@@ -357,23 +333,49 @@ async function main() {
   const allPreviousTopics = usedEntries.map((e) => e.topic).filter(Boolean);
 
   const rejectedTopics = [];
+  // Reddedilen adayların süreleri; isteme "bu kadar uzundu, kıs" diye geri veriliyor.
+  const uzunMetinler = [];
 
   const buildPrompt = () => `
 Sen Türkçe konuşan bir YouTube Shorts kanalı için içerik yazarısın.
-Kanalın formatı: "Günlük hayatta YANLIŞ yapılan bir işi gösterip, ardından DOĞRUSUNU"
-anlatan 20-28 saniyelik kısa bir seslendirme metni.
+Kanalın formatı: gerçekten yaşanmış ama BUGÜN HÂLÂ AÇIKLANAMAYAN bir olayı anlatan
+20-28 saniyelik kısa bir seslendirme metni. Ton: merak uyandıran, sakin, iddialı değil.
+
+ÇOK ÖNEMLİ - GÜVENİLİRLİK: Olay GERÇEK ve kayıtlı olmalı. Uydurma vaka, sahte
+tarih, uydurma isim veya "bilim insanları şok oldu" tarzı abartı YAZMA. Gizem,
+olayın kendisinden gelmeli; süslemeden değil. Komplo teorisi anlatma, doğrulanmış
+olguyu anlat ve neyin açıklanamadığını söyle.
 
 ${
   cliTopic
     ? `Konu şu olacak: "${cliTopic}".`
     : `Bu videonun kategorisi KESİNLİKLE şu olacak: "${category.name}".
 Bu kategoride şunlar işlenir: ${category.brief}.
-Bu kategori içinde, geniş kitleye hitap eden, şaşırtıcı ve pratik, spesifik bir alt konu bul.
+Bu kategori içinde, geniş kitleye hitap eden, şaşırtıcı ve SPESİFİK bir olay seç
+(genel bir konu değil, belirli bir vaka: "okyanus gizemleri" değil, "1997'de
+kaydedilen Bloop sesi" gibi).
+
+GÖRSEL BULUNABİLİRLİK ŞARTI: Seçtiğin olay, ücretsiz stok video kütüphanelerinde
+(Pexels/Pixabay) karşılığı bulunan bir ORTAM veya NESNE etrafında geçmeli -
+uzay/yıldızlar, gezegen, ay, teleskop, derin okyanus, dalga, sis, orman, çöl,
+mağara, antik kalıntı, taş yapı, eski harita, eski kitap, terk edilmiş bina,
+buzul, fırtına, gece gökyüzü gibi. Görsel karşılığı olmayan tamamen soyut bir
+olay seçme; ekranda gösterilecek bir şey kalmıyor.
 
 Bu kategoride DAHA ÖNCE İŞLENMİŞ konular. Bunları ne aynen ne de başka kelimelerle
 tekrar etme; aynı nesne/eylem etrafında dönen bir varyasyon da sayılır, tamamen
 başka bir alt konuya geç:
 ${JSON.stringify(promptTopicList, null, 0)}`
+}${
+  uzunMetinler.length > 0
+    ? `
+
+DİKKAT - UZUNLUK: Önceki denemelerinde metin çok uzundu (${uzunMetinler.join(
+        ", "
+      )} saniye; hedef ${HEDEF_MAKS_SANIYE} saniyenin altı). Bu sefer BELİRGİN
+şekilde kısalt: cümle sayısını azalt, sıfatları ve ara açıklamaları at, yıl/sayı
+kullanımını en fazla bire indir. Bilgiyi koru, süslemeyi at.`
+    : ""
 }${
   rejectedTopics.length > 0
     ? `
@@ -386,102 +388,138 @@ veya farklı bir eylem etrafında kurulu bir konu seç.`
 }
 
 VİDEONUN YAPISI (4 parça, sırayla seslendirilecek):
-1. "hook_metni"   -> ilk 1.5-2.5 saniye. İzleyicinin parmağını durduran açılış.
-2. "yanlis_metni" -> çoğu insanın nasıl/neden yanlış yaptığı.
-3. "dogru_metni"  -> doğrusu.
-4. "cta_metni"    -> beğen + abone daveti.
+1. "hook_metni"  -> ilk 1.5-2.5 saniye. İzleyicinin parmağını durduran açılış.
+2. "olay_metni"  -> ne oldu / ne bulundu. Somut bilgi: yer, zaman, kim kaydetti.
+3. "gizem_metni" -> NEDEN hâlâ açıklanamıyor. Gerilimin zirvesi burası; denenen
+   açıklamalar ve neden yetersiz kaldıkları.
+4. "cta_metni"   -> beğen + abone daveti.
 
 HOOK KURALLARI (en kritik kısım - videonun izlenip izlenmemesini bu belirler):
-- 6-11 kelime, TEK cümle. Bu sınır önemli: hook seslendirmede 2.5 saniyeyi
+- EN FAZLA 9 KELİME, TEK cümle. Bu sınır önemli: hook seslendirmede 2.5 saniyeyi
   geçerse izleyici cevaba varmadan kaydırıyor. Uzun yazma.
+- SAYI/TARİH UYARISI: hook'ta yıl veya büyük sayı geçiyorsa EN FAZLA 7 KELİME yaz.
+  "1997" yazıda tek kelimedir ama seslendirmede "bin dokuz yüz doksan yedi" olarak
+  okunur ve 4-5 kelimelik süre yer. Yılı hook'ta vermek yerine "olay_metni"ne
+  bırakabilirsin; hook'ta "yıllar önce", "on yıl boyunca" gibi kısa ifadeler yeterli.
 - Bir "merak boşluğu" açsın: izleyici cevabı öğrenmek için kalmak zorunda hissetsin.
-- İşe yarayan kalıplar: doğrudan iddia ("... aslında temizlemiyor, kirletiyor."),
-  şaşırtıcı oran ("Bunu yapanların onda dokuzu farkında değil."),
-  ikinci tekil şahıs uyarı ("Bunu her gün yapıyorsan, farkında olmadan ... bozuyorsun.").
-- İçinde konunun SOMUT nesnesi geçsin (sünger, priz, çamaşır makinesi...). Soyut kalma.
+- İşe yarayan kalıplar: imkânsız görünen olgu ("Bu sinyal 40 yıldır her gün
+  tekrarlıyor ve kaynağı bilinmiyor."), sayı + zaman ("150 yıldır aynı yerde
+  görülüyor."), yer + tuhaflık ("Bu adaya kimse ayak basamıyor.").
+- İçinde SOMUT bir dayanak geçsin: yer adı, tarih, süre veya sayı. "İnanılmaz bir
+  gizem" gibi boş cümle YAZMA - merakı kuran şey somutluktur.
 - "Merhaba arkadaşlar", "Bugün sizlere", "Hadi başlayalım" gibi ısınma cümlesi YASAK.
-- Cevabı hook'ta VERME; sadece merakı aç.
+- Cevabı hook'ta VERME; sadece merakı aç. Zaten kesin cevap yok - bunu avantaja çevir.
 - "hook_ekran_metni": aynı hook'un ekranda dev punto yazılacak 2-5 kelimelik hali
-  (tamamı büyük harf değil, normal yazım; ör. "Süngerin en kirli yeri").
+  (tamamı büyük harf değil, normal yazım; ör. "40 yıldır susmayan sinyal").
 
 ANLATIM TARZI (hook'tan sonraki bölümler için):
-- Sert/emredici bir reklam sesi gibi DEĞİL; iki arkadaşın sohbet ederken birinin
-  diğerine "ay bak sana bir şey anlatayım" der gibi anlattığı, sıcak, samimi,
-  bilgilendirici bir tonda olsun.
-- "Aslında çoğumuz...", "Ben de uzun süre öyle sanıyordum ama...", "Şöyle bir şey var:"
-  gibi doğal, konuşma diline yakın geçişler kullan.
+- Bağırmayan, sakin ama gerilimi tutan bir belgesel dış ses tonu: abartmadan,
+  olguyu sırayla açarak. "İnanılmaz", "şok edici", "bilim insanları hayrete düştü"
+  gibi klişe ve ünlem kullanma; gerilimi olayın kendisi taşısın.
+- Sayı, tarih ve yer adı kullan - inandırıcılığı ve merakı asıl bunlar kurar.
+- Geçişler doğal olsun: "Kayıtlara göre...", "Üç açıklama denendi...",
+  "Ama bir sorun var:" gibi.
 - Kısa cümleler ve akıcı bir ritim korunsun, Shorts'a uygun olsun.
 
 Kurallar:
-- "yanlis_metni" 2 cümle, "dogru_metni" 2 cümle. hook + yanlış + doğru toplamı
-  55-70 kelime civarı olsun (20-28 saniye). BU SINIRI AŞMA.
+- "olay_metni" 2 cümle, "gizem_metni" 2 cümle. hook + olay + gizem toplamı
+  45-55 kelime civarı olsun (20-25 saniye). BU SINIRI AŞMA.
+  Sayı ve tarihleri sayarken dikkat: "1997" ve "150.000" tek kelime görünür ama
+  seslendirmede 4-5 kelimelik süre alır. Metinde her yıl/büyük sayı için kendine
+  4 kelime saymış gibi davran ve toplamı ona göre kıs. Video başına EN FAZLA
+  iki tarih/büyük sayı kullan - fazlası hem süreyi şişiriyor hem anlatımı boğuyor.
   Neden bu kadar kısa: Shorts'ta en güçlü sıralama sinyali, videonun sonuna kadar
   izlenip başa dönmesidir (loop). 25 saniyelik video tamamlanıp döner; 45 saniyelik
   video ortasında bırakılır. Anlatımı sıkıştır: süsleme ve dolgu cümlesi at,
   bilgiyi bırak.
+- "gizem_metni" CEVAPSIZ bitsin. Soruyu açık bırakmak hem yorum getirir hem videoyu
+  baştan izletir (loop). "Bilim insanları hâlâ cevap arıyor" gibi klişe bir kapanış
+  yazma; onun yerine açıklanamayan SOMUT detayı en sona koy.
 BAŞLIK (title) KURALLARI - feed'de tıklanmayı bu belirler:
 - EN FAZLA 50 KARAKTER. Shorts feed'inde başlık bu uzunluktan sonra kırpılıyor;
   vaadin kırpılan kısımda kalması tıklamayı doğrudan öldürür.
-- Somut nesne mutlaka geçsin (silikon, sigorta, akü, derz, kombi...). "Bu hatayı
-  yapmayın" gibi nesnesiz, herhangi bir videoya uyabilecek başlık YAZMA.
+- Somut dayanak mutlaka geçsin: yer adı, tarih, sayı veya nesne adı. "İnanılmaz
+  bir gizem" gibi her videoya uyabilecek başlık YAZMA.
 - Cevabı başlıkta VERME; hook ile aynı merak boşluğunu taşısın.
 - İşe yarayan kalıplar (birini seç, hepsini birden kullanma):
-  "<Nesne> <eylem> yapanlar dikkat", "<Nesne> hakkında bilmediğin şey",
-  "<Sayı> kişiden <sayı>'si bunu yanlış yapıyor", "<Nesne> neden <beklenmedik sonuç>?"
+  "<Yer/Nesne>: <süre> yıldır çözülemedi", "<Olay> neden hâlâ açıklanamıyor?",
+  "<Sayı> yıl önce kaydedildi, kaynağı bilinmiyor", "<Yer>'de kimsenin
+  açıklayamadığı <şey>"
 - Sonuna TEK emoji ekle (konuyla ilgili olsun), en fazla bir tane.
 - Başlıkta TAMAMI büyük harf kelime kullanma; feed'de spam algılanıyor.
 
 AÇIKLAMA (description):
-- 2-3 cümle. İLK CÜMLE en kritik: insanların YouTube'da bu konuyu ararken yazacağı
-  ifade birebir geçsin (ör. "duş silikonu nasıl çekilir"). Arama sonuçlarında
-  eşleşme buradan kuruluyor.
-- İkinci cümlede videonun verdiği somut faydayı yaz.
+- 2-3 cümle. İLK CÜMLE en kritik: insanların YouTube'da bu olayı ararken yazacağı
+  ifade birebir geçsin (ör. "bloop sesi nedir", "voynich el yazması çözüldü mü").
+  Arama sonuçlarında eşleşme buradan kuruluyor.
+- İkinci cümlede olayın ne zaman/nerede gerçekleştiğini yaz.
 
 ETİKETLER (tags) - 10-14 adet, şu üç grubu KARIŞTIRARAK ver:
 - 4-5 adet DAR/uzun kuyruk terim: kullanıcının arama kutusuna yazacağı tam ifade
-  ("duş silikonu nasıl çekilir", "banyo derz temizliği").
-- 3-4 adet ORTA terim: konunun nesnesi + alan ("silikon çekme", "banyo tadilatı").
-- 3-4 adet GENİŞ terim: kanalın genel alanı ("ev tamiri", "tadilat ipuçları",
-  "pratik bilgiler", "usta tavsiyesi").
+  ("bloop sesi nedir", "voynich el yazması gizemi").
+- 3-4 adet ORTA terim: olayın adı + alan ("okyanus gizemi", "çözülemeyen şifre").
+- 3-4 adet GENİŞ terim: kanalın genel alanı ("gizem", "açıklanamayan olaylar",
+  "uzay gizemleri", "bilinmeyen tarih").
 - Etiketler Türkçe olsun ve hiçbiri diğerinin birebir tekrarı olmasın.
 GÖRSEL/STOK VİDEO TERİMLERİ (bu kısım kritik - yanlış terim, konuyla alakasız
 arka plan videosuna yol açıyor):
+
+TEMEL KURAL: Bu kanalın konuları soyut olabilir (bir sinyal, bir kayboluş, bir
+şifre), ama EKRANDA GÖSTERİLECEK ŞEY SOMUT OLMAK ZORUNDA. Olayın geçtiği ORTAMI
+veya olayla ilişkili NESNEYİ ara; olayın kendisini betimlemeye çalışma.
+Örnek: konu "okyanus derinliğinden gelen açıklanamayan ses" ise "mysterious sound"
+diye bir klip YOKTUR; "deep ocean", "underwater dark", "ocean waves" vardır.
+
+Aşağıdaki görsel dağarcık stok kütüphanelerinde BOL ve bu kanalın konularına uyar.
+Terimleri mümkün olduğunca bunların içinden veya bunlara yakın seç:
+  uzay/gökyüzü: "night sky", "starry sky", "milky way", "deep space", "nebula",
+    "galaxy", "planet earth", "moon surface", "full moon", "telescope",
+    "satellite orbit", "solar eclipse", "aurora sky"
+  okyanus/su: "deep ocean", "underwater dark", "ocean waves", "stormy sea",
+    "coral reef", "diver underwater", "shipwreck underwater", "foggy lake"
+  tarih/antik: "ancient ruins", "stone temple", "old manuscript", "old map",
+    "ancient statue", "pyramid desert", "cave painting", "old book pages",
+    "candle light", "medieval castle"
+  atmosfer/gizem: "foggy forest", "dark forest", "abandoned building",
+    "empty corridor", "desert dunes", "ice glacier", "cave interior",
+    "lightning storm", "rain window", "smoke dark"
+
 - "stok_arama_terimleri": TAM OLARAK 5 elemanlı İngilizce dizi. Sıra ÖNEMLİ, çünkü
   her eleman videonun belirli bir bölümünde ekranda görünecek:
-    [0] KANCA bölümü  → konunun nesnesini genel olarak gösteren sahne
-    [1] YANLIŞ bölümü → hatalı/özensiz yapılan hali, dağınıklık, sorunun kendisi
-    [2] DOĞRU bölümü  → DÜZGÜN YAPILAN İŞLEMİN KENDİSİ
-    [3] DOĞRU bölümü  → aynı işlemin başka bir anı ya da temiz/başarılı sonucu
-    [4] KAPANIŞ       → memnun sonuç, tamamlanmış iş
-  [2] ve [3] EN KRİTİK OLANLAR: izleyici videoyu doğru yöntemi görmek için izliyor.
-  Bu ikisi mutlaka DOĞRU yöntemin uygulandığı eylemi betimlesin; "home repair diy",
-  "person working" gibi jenerik sahneler YAZMA - bunlar konuyu göstermez.
+    [0] KANCA bölümü         → olayın geçtiği ortamı kuran genel/geniş sahne
+    [1] OLAY bölümü          → olayla doğrudan ilişkili nesne veya mekân
+    [2] AÇIKLANAMAYAN bölümü → gerilimi taşıyan sahne (karanlık, derinlik, boşluk)
+    [3] AÇIKLANAMAYAN bölümü → aynı atmosferin başka bir açısı
+    [4] KAPANIŞ              → geniş, sakin, düşündüren kapanış sahnesi
+  [2] ve [3] EN KRİTİK OLANLAR: gerilimin zirvesi orada, ekranın da o hissi
+  taşıması gerekiyor.
   HER TERİM EN FAZLA 3 KELİME OLSUN. Bu sınır kritik: stok kütüphanelerinde
-  "installing new gas hose" ya da "checking gas leak with soap" gibi bir klip YOKTUR,
-  ama "gas hose" ve "gas pipe" vardır. Uzun ve cümle gibi yazılmış terimler hiçbir
-  sonuç getirmiyor ve sahne genel bir yedek klibe düşüyor.
-  Terimler stok video kütüphanelerinde GERÇEKTEN bulunabilecek, yaygın sahneler olsun;
-  aşırı spesifik/sinematik tarifler ("hand rolling lemon counterclockwise") yazma.
-  Her terimin içinde konunun ana nesnesi geçsin.
+  "unexplained radio signal from space" gibi bir klip YOKTUR, ama "radio telescope"
+  ve "deep space" vardır. Uzun ve cümle gibi yazılmış terimler hiçbir sonuç
+  getirmiyor ve sahne genel bir yedek klibe düşüyor.
+  Beş terim birbirinden GÖRSEL OLARAK farklı olsun; hepsi "night sky" olursa video
+  tek düze görünür.
 - "stok_yedek_terimleri": TAM OLARAK 5 elemanlı İngilizce dizi; her eleman
   "stok_arama_terimleri" içindeki AYNI SIRADAKİ terimin daha genel yedeği olsun.
   Her biri 1-2 kelime ve stok kütüphanelerinde kesinlikle sonuç veren yaygın bir
-  sahne olmalı. Yine de konunun nesnesini taşımalı: "gas hose" için yedek
-  "gas pipe" veya "kitchen stove" olur, "person working" OLMAZ.
+  sahne olmalı (yukarıdaki dağarcıktan seçmek en güvenlisi). Yine de konunun
+  atmosferini taşımalı: "radio telescope" için yedek "night sky" olur,
+  "person working" OLMAZ.
   Bu alan, spesifik terim tutmadığında o sahnenin kendi yedeğine düşmesini sağlar;
-  yoksa tüm tutmayan sahneler aynı klibi paylaşıp video tekrara düşüyor.
+  yoksa tutmayan tüm sahneler aynı klibi paylaşıp video tekrara düşüyor.
 - "stok_zorunlu_kelimeler": 2-4 elemanlı İngilizce TEK KELİMELİK isim dizisi. Bunlar
   konunun görsel çekirdeğidir; bir stok klip bunlardan HİÇBİRİNİ içermiyorsa o klip
-  konuyla alakasızdır ve kullanılmayacaktır. Geniş değil, somut nesne/mekan adı ver.
-  Örnek - konu "uzatma kablosunun sarılı kullanılması" ise: ["cable","cord","socket","plug"].
-  Örnek - konu "banyo silikonunun küflenmesi" ise: ["bathroom","tile","shower","caulk"].
-  "person", "home", "work" gibi her videoya uyan genel kelimeler YAZMA.
+  konuyla alakasızdır ve kullanılmayacaktır. Somut nesne/mekân adı ver.
+  Örnek - konu "uzaydan gelen tekrarlayan sinyal" ise: ["space","sky","star","telescope"].
+  Örnek - konu "okyanusta kaybolan gemi" ise: ["ocean","sea","ship","water"].
+  Örnek - konu "çözülemeyen antik el yazması" ise: ["manuscript","book","paper","ancient"].
+  "person", "nature", "background" gibi her videoya uyan genel kelimeler YAZMA.
 - "stok_genel_terim": 2 kelimelik İngilizce yedek sorgu. Spesifik terimler sonuç
-  vermezse bu kullanılır, ama yine konuyu temsil etmeli (ör. "electrical socket",
-  "bathroom tiles", "car tire").
+  vermezse bu kullanılır; yukarıdaki dağarcıktan konuya en yakın olanı seç
+  (ör. "night sky", "deep ocean", "ancient ruins").
 - "cta_metni": videonun EN SONUNDA söylenecek, sıcak ve samimi tek bir Türkçe cümle.
-  EN FAZLA 7 KELİME. Mutlaka "beğen" ve "abone ol" fiillerini (veya eş anlamlılarını)
-  içersin. Her seferinde farklı kelimelerle yaz, kalıplaşmış cümleyi tekrar etme.
+  EN FAZLA 5 KELİME. Mutlaka "beğen" ve "abone ol" fiillerini (veya eş anlamlılarını)
+  içersin. Örnek uzunluk: "Beğen ve abone ol." / "Abone ol, kaçırma." Her seferinde farklı kelimelerle yaz, kalıplaşmış cümleyi tekrar etme.
   Neden bu kadar kısa: kapanış anonsu izleyicinin kaydırdığı yerdir. 14 kelimelik
   bir CTA 4 saniye sürüyor ve 26 saniyelik videonun altıda birini kaplıyor; bu
   süre boyunca izleyici zaten gitmiş oluyor, ama izlenme oranı hesabına dahil
@@ -497,8 +535,8 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
   "tags": ["...", "..."],
   "hook_metni": "...",
   "hook_ekran_metni": "...",
-  "yanlis_metni": "...",
-  "dogru_metni": "...",
+  "olay_metni": "...",
+  "gizem_metni": "...",
   "cta_metni": "...",
   "stok_arama_terimleri": ["...", "...", "...", "...", "..."],
   "stok_yedek_terimleri": ["...", "...", "...", "...", "..."],
@@ -518,6 +556,30 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
   const MAX_ATTEMPTS = 3;
   let parsed = null;
 
+  // --- Süre ölçüsü ---------------------------------------------------
+  // Ham kelime sayısı süreyi olduğundan kısa gösteriyor: "1997" yazıda tek
+  // kelime ama seslendirmede "bin dokuz yüz doksan yedi" olarak okunuyor ve
+  // 4-5 kelimelik süre alıyor. Bu kanalın konuları tarih/sayı ağırlıklı olduğu
+  // için fark birikiyor. Sayıları ağırlıklandırıp gerçek süreye yaklaşıyoruz.
+  const SAYI_AGIRLIGI = 4;
+  // Bu sabit tahminden değil, üretilen videoların ölçülmesinden geldi:
+  // 64 ağırlıklı kelime -> 28.7 saniye.
+  const KELIME_PER_SANIYE = 2.2;
+  const HEDEF_MAKS_SANIYE = 28;
+
+  const kelimeler = (t) => String(t || "").trim().split(/\s+/).filter(Boolean);
+  const kelimeSay = (t) => kelimeler(t).length;
+  const agirlikliSay = (t) =>
+    kelimeler(t).reduce((toplam, k) => {
+      const rakamlar = k.replace(/[^0-9]/g, "");
+      return toplam + (rakamlar.length >= 3 ? SAYI_AGIRLIGI : 1);
+    }, 0);
+  const tahminiSure = (c) =>
+    [c?.hook_metni, c?.olay_metni, c?.gizem_metni].reduce(
+      (t, b) => t + agirlikliSay(b),
+      0
+    ) / KELIME_PER_SANIYE;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const candidate = extractJson(await callGemini(buildPrompt()));
 
@@ -527,17 +589,32 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
     }
 
     const duplicate = findDuplicate(candidate.topic, allPreviousTopics);
-    if (!duplicate) {
+    const sure = tahminiSure(candidate);
+
+    // Metnin uzunluğunu isteme yazmak yetmiyor: model sınırı düzenli olarak
+    // aşıyor ve video loop bandının dışına çıkıyor. Ölçüp reddediyoruz.
+    if (!duplicate && sure <= HEDEF_MAKS_SANIYE) {
       parsed = candidate;
       break;
     }
 
-    rejectedTopics.push(candidate.topic);
-    console.warn(
-      `⚠️  "${candidate.topic}" daha önceki "${duplicate}" konusuyla fazla benzer ` +
-        `(deneme ${attempt}/${MAX_ATTEMPTS}), yeniden üretiliyor...`
-    );
-    parsed = candidate; // son çare olarak elde kalsın
+    // Elde en kısa adayı tutuyoruz: hiçbir deneme sınırı tutturamazsa
+    // en azından en iyisini yayınlarız.
+    if (!parsed || sure < tahminiSure(parsed)) parsed = candidate;
+
+    if (duplicate) {
+      rejectedTopics.push(candidate.topic);
+      console.warn(
+        `⚠️  "${candidate.topic}" daha önceki "${duplicate}" konusuyla fazla benzer ` +
+          `(deneme ${attempt}/${MAX_ATTEMPTS}), yeniden üretiliyor...`
+      );
+    } else {
+      uzunMetinler.push(Math.round(sure));
+      console.warn(
+        `⚠️  Metin ~${Math.round(sure)} sn (hedef ${HEDEF_MAKS_SANIYE} sn altı) ` +
+          `(deneme ${attempt}/${MAX_ATTEMPTS}), kısaltılarak yeniden üretiliyor...`
+      );
+    }
   }
 
   if (rejectedTopics.length === MAX_ATTEMPTS) {
@@ -549,10 +626,10 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
 
   // Model hook'u atlarsa video eski (kancasız) haline düşmesin diye
   // yanlış metninin ilk cümlesini hook'a terfi ettiriyoruz.
-  if (!parsed.hook_metni && parsed.yanlis_metni) {
-    const firstSentence = parsed.yanlis_metni.split(/(?<=[.!?])\s+/)[0];
+  if (!parsed.hook_metni && parsed.olay_metni) {
+    const firstSentence = parsed.olay_metni.split(/(?<=[.!?])\s+/)[0];
     parsed.hook_metni = firstSentence;
-    parsed.yanlis_metni = parsed.yanlis_metni.slice(firstSentence.length).trim();
+    parsed.olay_metni = parsed.olay_metni.slice(firstSentence.length).trim();
     console.warn("⚠️  Model hook üretmedi, ilk cümle hook'a terfi ettirildi.");
   }
   if (!parsed.hook_ekran_metni) {
@@ -561,18 +638,33 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
 
   // Süre denetimi: model kelime sınırını aşarsa video loop bandının dışına
   // çıkıyor ve tamamlanma oranı düşüyor. Sessizce geçmesin.
-  const kelimeSay = (t) => String(t || "").trim().split(/\s+/).filter(Boolean).length;
-  const konusmaKelime =
-    kelimeSay(parsed.hook_metni) +
-    kelimeSay(parsed.yanlis_metni) +
-    kelimeSay(parsed.dogru_metni);
-  if (konusmaKelime > 80) {
+  //
+  // Ham kelime sayısı süreyi olduğundan kısa gösteriyor: "1997" yazıda tek
+  // kelime ama seslendirmede "bin dokuz yüz doksan yedi" olarak okunuyor ve
+  // 4-5 kelimelik süre alıyor. Bu kanalın konuları tarih ve sayı ağırlıklı
+  // olduğu için fark birikiyor (ölçülen bir örnekte 63 kelime 30 saniye sürdü).
+  // Sayıları ağırlıklandırıp gerçek süreye yakın bir tahmin üretiyoruz.
+  const bolumler = [parsed.hook_metni, parsed.olay_metni, parsed.gizem_metni];
+  const konusmaKelime = bolumler.reduce((t, b) => t + kelimeSay(b), 0);
+  const agirlikli = bolumler.reduce((t, b) => t + agirlikliSay(b), 0);
+  const tahminSn = Math.round(agirlikli / KELIME_PER_SANIYE);
+
+  const hookAgirlik = agirlikliSay(parsed.hook_metni);
+  if (hookAgirlik > 12) {
     console.warn(
-      `⚠️  Metin ${konusmaKelime} kelime (hedef 55-70, ~20-28 sn). ` +
-        "Video loop bandının dışına çıkabilir."
+      `⚠️  Hook ağır: ${kelimeSay(parsed.hook_metni)} kelime ama ` +
+        `~${(hookAgirlik / KELIME_PER_SANIYE).toFixed(1)} sn sürecek (hedef 2.5 sn). ` +
+        "Muhtemelen içinde yıl/sayı var; hook kartı fazla uzun ekranda kalacak."
+    );
+  }
+
+  if (tahminSn > HEDEF_MAKS_SANIYE) {
+    console.warn(
+      `⚠️  Metin ~${tahminSn} sn (${konusmaKelime} kelime, sayılar ağırlıklı). ` +
+        "Hedef 20-28 sn; video loop bandının dışına çıkabilir."
     );
   } else {
-    console.log(`   Metin: ${konusmaKelime} kelime (~${Math.round(konusmaKelime / 2.6)} sn)`);
+    console.log(`   Metin: ${konusmaKelime} kelime, ~${tahminSn} sn (sayılar ağırlıklı)`);
   }
 
   if (parsed.title && parsed.title.length > 55) {

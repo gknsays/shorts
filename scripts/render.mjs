@@ -32,14 +32,14 @@ function pickMusic() {
 //
 // Eskiden BackgroundReel toplam süreyi klip sayısına eşit bölüyordu; hangi klibin
 // hangi bölümde görüneceği tesadüfe kalıyordu. Sonuç: "doğru yöntem" için indirilen
-// klip YANLIŞ bölümünde, jenerik bir klip de tam DOĞRU bölümünün ortasında
+// klip OLAY bölümünde, jenerik bir klip de tam AÇIKLANAMAYAN bölümünün ortasında
 // çıkabiliyordu - izleyici anlatılan işlemi hiç görmüyordu.
 //
 // Artık her bölüm kendi kliplerini alıyor:
 //   KANCA  -> 1 klip   (terim 0)
-//   YANLIŞ -> 1 klip   (terim 1)
-//   DOĞRU  -> 2 klip   (terim 2 ve 3 - işlemin gösterildiği asıl kısım)
-//   KAPANIŞ-> 1 klip   (terim 4)
+//   OLAY          -> 1 klip   (terim 1)
+//   AÇIKLANAMAYAN -> 2 klip   (terim 2 ve 3 - gerilimin zirvesi, en uzun bölüm)
+//   KAPANIŞ       -> 1 klip   (terim 4)
 const CLIPS_PER_PHASE = [1, 1, 2, 1];
 
 function buildScenes(captions, clips) {
