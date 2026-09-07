@@ -13,9 +13,7 @@
     "run-pipeline": "node scripts/run.mjs",
     "youtube-auth": "node scripts/youtubeAuth.mjs",
     "make-music": "node scripts/makeMusic.mjs",
-    "produce-video": "node scripts/produceVideo.mjs",
-    "produce-quiz": "node scripts/produceQuiz.mjs",
-    "make-sfx": "node scripts/makeSfx.mjs"
+    "produce-video": "node scripts/produceVideo.mjs"
   },
   "dependencies": {
     "@andresaya/edge-tts": "^1.8.0",
