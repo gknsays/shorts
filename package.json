@@ -12,10 +12,14 @@
     "upload": "node scripts/upload.mjs",
     "run-pipeline": "node scripts/run.mjs",
     "youtube-auth": "node scripts/youtubeAuth.mjs",
-    "make-music": "node scripts/makeMusic.mjs"
+    "make-music": "node scripts/makeMusic.mjs",
+    "produce-video": "node scripts/produceVideo.mjs",
+    "produce-quiz": "node scripts/produceQuiz.mjs",
+    "make-sfx": "node scripts/makeSfx.mjs"
   },
   "dependencies": {
     "@andresaya/edge-tts": "^1.8.0",
+    "@remotion/bundler": "4.0.286",
     "@remotion/cli": "4.0.286",
     "@remotion/renderer": "4.0.286",
     "@remotion/transitions": "^4.0.286",

@@ -46,6 +46,27 @@ const BEDS = [
     arpGain: 0.32,
   },
   {
+    // QUIZ FORMATI İÇİN: gerilim ve acele hissi.
+    // Amaç izleyiciyi kovalamak - saniye işleyen bir tik-tak, nabız gibi bas
+    // ve çözülmeyen bir akor dizisi. İzleyici şıkları rahatça okuyamadığını
+    // hissedince videoyu başa sarıyor; tekrar izleme Shorts'ta en güçlü
+    // sıralama sinyallerinden biri.
+    //
+    // Akor dizisi bilinçli olarak "çözülmüyor": Am - F - Dm - E7 dizisi E7'de
+    // asılı kalıp tekrar Am'e dönüyor. Kulak kapanış beklerken döngü yeniden
+    // başlıyor ve gerilim birikiyor.
+    name: "bed-gerilim",
+    bpm: 126,
+    chords: [
+      [57, 60, 64], // Am
+      [53, 57, 60], // F
+      [50, 53, 57], // Dm
+      [52, 56, 59], // E  (çözülmeyen, geri döndüren akor)
+    ],
+    arpGain: 0.30,
+    gerilim: true,
+  },
+  {
     name: "bed-3", // yumuşak lo-fi, yedili akorlar
     bpm: 76,
     chords: [
@@ -109,10 +130,33 @@ function renderBed(bed) {
       decay *
       (Math.sin(2 * Math.PI * f * t) + 0.25 * Math.sin(4 * Math.PI * f * t));
 
+    // --- Gerilim katmanı (yalnızca quiz bedi) ---
+    if (bed.gerilim) {
+      // Tik-tak: her sekizlikte çok kısa, yüksek frekanslı bir vuruş.
+      // Saat sesi çağrışımı yaptığı için izleyicide "zaman doluyor" hissi
+      // kuruyor; sözü örtmeyecek kadar kısa ve dar bantta tutuluyor.
+      const tickStep = beatSeconds / 2;
+      const tickIdx = Math.floor(t / tickStep);
+      const tickT = t - tickIdx * tickStep;
+      const tickDecay = Math.exp(-tickT * 220);
+      // Çift ve tek sekizlikler farklı perdede: "tik-tak" hissi
+      const tickFreq = tickIdx % 2 === 0 ? 2100 : 1650;
+      sample += 0.20 * tickDecay * Math.sin(2 * Math.PI * tickFreq * t);
+
+      // Nabız bası: her vuruşta kısa, derin bir darbe. Kalp atışı gibi
+      // aciliyet veriyor.
+      const beatIdx = Math.floor(t / beatSeconds);
+      const beatT = t - beatIdx * beatSeconds;
+      const kickDecay = Math.exp(-beatT * 16);
+      const kickFreq = 62 * Math.exp(-beatT * 9); // düşen perde = darbe hissi
+      sample += 0.42 * kickDecay * Math.sin(2 * Math.PI * kickFreq * t);
+    }
+
     buf[i] = sample;
   }
 
-  lowpass(buf, 2400);
+  // Gerilim bedinde tik-tak sesinin duyulabilmesi için kesim frekansı yukarıda.
+  lowpass(buf, bed.gerilim ? 5200 : 2400);
 
   // Kuyruğu başa crossfade ederek dikişsiz döngü elde ediyoruz.
   const out = new Float64Array(loopSamples);

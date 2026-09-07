@@ -5,6 +5,11 @@ token.json
 data/metadata.json
 data/captions.json
 data/background.json
+# Her calistirmada yeniden uretiliyor
+data/quiz.json
+# makeSfx.mjs ile uretiliyor, deterministik - depoda tutmaya gerek yok
+public/sfx/tiktak.wav
+public/sfx/zil.wav
 public/audio
 public/video
 public/sample
