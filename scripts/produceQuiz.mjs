@@ -42,6 +42,13 @@ const BASE_RATE = process.env.EDGE_TTS_RATE || "+8%";
 // aceleci bulundu: izleyici üç şıkkı okuyamadan cevap açılıyordu. Okuyamamak
 // merak değil rahatsızlık üretiyor ve kaydırmaya yol açıyor.
 const DUSUNME_SANIYE = 3.5;
+
+// Doğrulamadan geçen soru sayısı hedefi. Elenen sorular olduğunda eksik kalan
+// kadarı yeni turda tamamlanıyor; MIN_SORU'nun altına düşülürse video hiç
+// üretilmiyor - yanlış bilgi yayınlamaktansa o gün video çıkmasın.
+const HEDEF_SORU = 3;
+const MIN_SORU = 3;
+const MAX_TUR = 6;
 const CEVAP_PAYI = 0.6;
 const INTRO_SANIYE = 2.0;
 const OUTRO_SANIYE = 3.2;
@@ -66,9 +73,15 @@ const MODEL_CHAIN = [
   ),
 ];
 
-async function callGemini(prompt) {
+async function callGemini(prompt, { temperature = 0.9, modelOffset = 0 } = {}) {
   let lastError = null;
-  for (const model of MODEL_CHAIN) {
+  // modelOffset: doğrulama örneklerinin FARKLI modellerden gelmesi için
+  // zinciri kaydırıyoruz. Aynı modele üç kez sormak bağımsız bir kontrol
+  // değil; aynı hatayı üç kez tekrarlar.
+  const zincir = MODEL_CHAIN.map(
+    (_, i) => MODEL_CHAIN[(i + modelOffset) % MODEL_CHAIN.length]
+  );
+  for (const model of zincir) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const res = await fetch(
@@ -78,7 +91,7 @@ async function callGemini(prompt) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.9 },
+              generationConfig: { temperature },
             }),
           }
         );
@@ -162,8 +175,12 @@ function buildPrompt(gecmisSorular) {
     "  yeniden yaz: \"Kredi kartı şifresi nerede saklanmalı?\"",
     "",
     "ANLATIM (seslendirilecek):",
-    '- "soru_anlatim": sorunun sesli okunacak hali. Soruyla aynı olabilir ama',
-    "  doğal konuşma gibi olsun.",
+    "- Sorunun kendisi olduğu gibi seslendirilecek; ayrı bir anlatım metni YOK.",
+    "  Bu yüzden \"soru\" alanı hem ekranda okunabilir hem sesli okunduğunda",
+    "  doğal duyulan tek bir cümle olmalı.",
+    "- \"cevap_anlatim\" DOĞRU ŞIKKIN METNİNİ AYNEN İÇERMELİ. Ekranda yeşile",
+    "  dönen şıkla kulaktaki cevap birebir aynı olmalı; başka kelimelerle",
+    "  söylersen izleyici uyuşmazlık görüyor.",
     '- "cevap_anlatim": EN FAZLA 8 KELİME. Bu sınır kritik: cevap anlatımı uzun',
     "  olduğunda video 40 saniyeye çıkıyor ve tutulma düşüyor. Doğru şıkkı söyle,",
     "  varsa tek kısa sebep ekle, orada bitir.",
@@ -194,7 +211,6 @@ function buildPrompt(gecmisSorular) {
             soru: "...",
             secenekler: ["...", "...", "..."],
             dogru: 0,
-            soru_anlatim: "...",
             cevap_anlatim: "...",
           },
         ],
@@ -208,60 +224,140 @@ function buildPrompt(gecmisSorular) {
 // --- Doğrulama ------------------------------------------------------------
 // Model kurallara her zaman uymuyor; render'a bozuk veri gitmesin diye
 // biçimi burada denetliyoruz.
-function dogrula(q) {
+// Tek bir sorunun biçim denetimi. Parti bazlı denetimden soru bazlı denetime
+// geçildi: bir partideki tek bozuk soru yüzünden diğer iki sağlam soruyu da
+// çöpe atmak, doğrulama elemeleriyle birleşince üretimi tamamen durduruyordu.
+function soruBicimHatalari(s) {
   const hatalar = [];
-  const sorular = q?.sorular;
-  if (!Array.isArray(sorular) || sorular.length < 2) {
-    hatalar.push("en az 2 soru gerekli");
+
+  if (!s.soru || s.soru.split(/\s+/).length > 14) {
+    hatalar.push("soru metni yok ya da 14 kelimeden uzun");
+  }
+  if (!Array.isArray(s.secenekler) || s.secenekler.length !== 3) {
+    hatalar.push("tam olarak 3 şık olmalı");
+    return hatalar; // şıklar bozuksa kalan denetimler anlamsız
+  }
+  if (
+    typeof s.dogru !== "number" ||
+    s.dogru < 0 ||
+    s.dogru >= s.secenekler.length
+  ) {
+    hatalar.push('"dogru" indeksi geçersiz');
     return hatalar;
   }
-  sorular.forEach((s, i) => {
-    const n = i + 1;
-    if (!s.soru || s.soru.split(/\s+/).length > 14)
-      hatalar.push(`soru ${n}: metin yok ya da 14 kelimeden uzun`);
-    if (!Array.isArray(s.secenekler) || s.secenekler.length !== 3)
-      hatalar.push(`soru ${n}: tam olarak 3 şık olmalı`);
-    if (
-      typeof s.dogru !== "number" ||
-      s.dogru < 0 ||
-      s.dogru >= (s.secenekler?.length ?? 0)
-    )
-      hatalar.push(`soru ${n}: "dogru" indeksi geçersiz`);
-    if (!s.cevap_anlatim) {
-      hatalar.push(`soru ${n}: cevap anlatımı yok`);
-    } else if (s.cevap_anlatim.split(/\s+/).length > 10) {
-      // Sınırı istemde yazmak yetmiyor; ölçüp reddetmek gerekiyor. Uzun cevap
-      // anlatımı videoyu 40 saniyeye çıkarıyor ve tutulmayı düşürüyor.
-      hatalar.push(
-        `soru ${n}: cevap anlatımı ${s.cevap_anlatim.split(/\s+/).length} kelime (en fazla 10)`
-      );
-    }
-  });
-
-  // Alan tekrarı: kelime bazlı denetim yetmiyordu. "pilav", "makarna" ve
-  // "pirinç" farklı kelimeler ama üçü de mutfak; video tek düze çıkıyordu.
-  // Modelden alan etiketi isteyip onların farklı olmasını şart koşuyoruz.
-  const alanlar = sorular.map((s) =>
-    String(s.alan || "").toLocaleLowerCase("tr-TR").trim()
-  );
-  if (alanlar.some((a) => !a)) {
-    hatalar.push("her soruda \"alan\" etiketi olmalı");
-  } else if (new Set(alanlar).size < alanlar.length) {
-    hatalar.push(`sorular aynı alandan (${alanlar.join(", ")}) - üçü farklı olmalı`);
+  if (!String(s.alan || "").trim()) {
+    hatalar.push('"alan" etiketi yok');
   }
 
-  // Şıklardan biri "hiçbiri" / "hepsi" ise soru zayıflıyor: izleyici tahmin
-  // edecek somut bir şey bulamıyor ve cevap tatmin etmiyor.
-  // Birebir eşleşme yetersizdi: "Hiçbirine basılmamalı", "Hepsi doğru" gibi
-  // çekimli haller filtreyi geçiyordu. Kelime BAŞLANGICINA bakıyoruz.
+  // "Hiçbirine basılmamalı" gibi çekimli haller de yakalanıyor.
   const kacamak =
     /^\s*(hi[çc]bir|hepsi|t[üu]m[üu]|bilmiyorum|fark etmez|ikisi de)/i;
-  sorular.forEach((s, i) => {
-    if ((s.secenekler ?? []).some((x) => kacamak.test(String(x).trim()))) {
-      hatalar.push(`soru ${i + 1}: "hiçbiri/hepsi" gibi kaçamak şık kullanılmış`);
+  if (s.secenekler.some((x) => kacamak.test(String(x).trim()))) {
+    hatalar.push("kaçamak şık kullanılmış");
+  }
+
+  if (!s.cevap_anlatim) {
+    hatalar.push("cevap anlatımı yok");
+  } else {
+    const kelime = s.cevap_anlatim.split(/\s+/).length;
+    if (kelime > 10) {
+      hatalar.push(`cevap anlatımı ${kelime} kelime (en fazla 10)`);
     }
-  });
+    // Seslendirilen cevap ile ekranda işaretlenen şık uyuşmalı.
+    const dogruSik = s.secenekler[s.dogru];
+    const sadelestir = (t) =>
+      String(t)
+        .toLocaleLowerCase("tr-TR")
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim();
+    if (!sadelestir(s.cevap_anlatim).includes(sadelestir(dogruSik))) {
+      hatalar.push(`cevap anlatımı doğru şıkkı ("${dogruSik}") birebir içermiyor`);
+    }
+  }
+
   return hatalar;
+}
+
+// --- Bilgi doğrulama ------------------------------------------------------
+//
+// Biçim denetimleri (şık sayısı, kelime sınırı, alan çeşitliliği) sorunun
+// DOĞRU olduğunu göstermiyor. Model "ütü lekesine asetonsuz oje" gibi
+// tamamen uydurma bir cevabı kurallara uygun biçimde üretebiliyor.
+//
+// Bu katman bilginin kendisini denetliyor: soru, doğru cevabın NE OLDUĞU
+// SÖYLENMEDEN modele yeniden soruluyor. Üç bağımsız örnek alınıyor ve her
+// biri farklı bir modelden başlıyor - aynı modele üç kez sormak bağımsız
+// kontrol sayılmaz, aynı hatayı üç kez tekrarlar.
+//
+// Kabul şartı: üç örnek de AYNI şıkkı seçmeli, bu şık üretilen cevapla
+// eşleşmeli ve hiçbiri soruyu "tartışmalı" işaretlememeli.
+const DOGRULAMA_ORNEK = 3;
+
+function dogrulamaIstemi(soru) {
+  const siklar = soru.secenekler
+    .map((sik, i) => `${String.fromCharCode(65 + i)}) ${sik}`)
+    .join("\n");
+
+  return [
+    "Aşağıdaki çoktan seçmeli soruyu cevapla. Sana doğru cevap VERİLMEDİ;",
+    "kendi bilginle karar ver.",
+    "",
+    "SORU: " + soru.soru,
+    siklar,
+    "",
+    "Kurallar:",
+    "- Emin değilsen bunu açıkça belirt. Tahmin yürütme.",
+    "- Cevap kaynağa, bölgeye, markaya ya da koşullara göre değişiyorsa",
+    "  ya da uzmanlar arasında tartışmalıysa \"tartismali\" alanına true yaz.",
+    "- Birden fazla şık doğru sayılabiliyorsa da \"tartismali\" true olsun.",
+    "",
+    "SADECE şu JSON ile cevap ver:",
+    '{"cevap": "A", "eminlik": "yuksek|orta|dusuk", "tartismali": false, "gerekce": "tek cümle"}',
+  ].join("\n");
+}
+
+async function soruDogrula(soru, logOnEk = "") {
+  const beklenen = String.fromCharCode(65 + soru.dogru);
+  const cevaplar = [];
+
+  for (let i = 0; i < DOGRULAMA_ORNEK; i++) {
+    let sonuc;
+    try {
+      const ham = await callGemini(dogrulamaIstemi(soru), {
+        temperature: 0.25, // düşük: tahmin değil, bilgi istiyoruz
+        modelOffset: i, // her örnek farklı modelden başlasın
+      });
+      sonuc = extractJson(ham);
+    } catch (err) {
+      return { gecti: false, sebep: "doğrulama çağrısı başarısız: " + err.message };
+    }
+
+    const cevap = String(sonuc.cevap || "").trim().toUpperCase().slice(0, 1);
+    cevaplar.push(cevap);
+
+    if (sonuc.tartismali === true) {
+      return { gecti: false, sebep: `tartışmalı bulundu (${sonuc.gerekce || "-"})` };
+    }
+    if (String(sonuc.eminlik || "").toLowerCase() === "dusuk") {
+      return { gecti: false, sebep: "doğrulayıcı emin değil" };
+    }
+  }
+
+  const hepsiAyni = new Set(cevaplar).size === 1;
+  if (!hepsiAyni) {
+    return {
+      gecti: false,
+      sebep: `doğrulayıcılar anlaşamadı (${cevaplar.join(", ")})`,
+    };
+  }
+  if (cevaplar[0] !== beklenen) {
+    return {
+      gecti: false,
+      sebep: `doğrulayıcılar ${cevaplar[0]} dedi, soruda ${beklenen} işaretli`,
+    };
+  }
+
+  return { gecti: true, sebep: `${DOGRULAMA_ORNEK}/${DOGRULAMA_ORNEK} doğrulandı` };
 }
 
 // Şıkları karıştırır ve doğru şıkkın yeni indeksini hesaplar.
@@ -342,33 +438,72 @@ async function main() {
   fs.mkdirSync(AUDIO_DIR, { recursive: true });
   fs.mkdirSync(path.join(ROOT, "out"), { recursive: true });
 
-  console.log("=== 1/4 Sorular üretiliyor ===");
+  console.log("=== 1/4 Sorular üretiliyor ve doğrulanıyor ===");
   const gecmis = loadUsed();
-  let quiz = null;
-  for (let deneme = 1; deneme <= 3; deneme++) {
+
+  // Doğrulamadan geçen sorular biriktiriliyor. Bir soru elenirse tüm parti
+  // atılmıyor; eksik kalan kadarı yeni turda tamamlanıyor.
+  const dogrulanmis = [];
+  const kullanilanAlanlar = new Set();
+  let sonQuiz = null;
+
+  for (let tur = 1; tur <= MAX_TUR && dogrulanmis.length < HEDEF_SORU; tur++) {
     const aday = extractJson(await callGemini(buildPrompt(gecmis)));
-    const hatalar = dogrula(aday);
-    if (hatalar.length === 0) {
-      quiz = aday;
-      break;
+    if (!Array.isArray(aday?.sorular) || aday.sorular.length === 0) {
+      console.warn(`⚠️  Tur ${tur}/${MAX_TUR}: soru üretilemedi, yeniden deneniyor...`);
+      continue;
     }
-    console.warn(
-      `⚠️  Biçim hatası (deneme ${deneme}/3): ${hatalar.join("; ")} — yeniden üretiliyor...`
+    sonQuiz = aday;
+
+    for (const ham of aday.sorular) {
+      if (dogrulanmis.length >= HEDEF_SORU) break;
+
+      // Biçim denetimi soru bazında: bozuk olan atlanıyor, sağlamlar
+      // partiden kurtarılıyor.
+      const bicimHatalari = soruBicimHatalari(ham);
+      if (bicimHatalari.length > 0) {
+        console.log(
+          `  [${ham.alan ?? "?"}] ${String(ham.soru ?? "").slice(0, 46)} ... ✗ biçim: ${bicimHatalari.join("; ")}`
+        );
+        continue;
+      }
+
+      const soru = siklariKaristir(ham);
+      const alan = String(soru.alan || "").toLocaleLowerCase("tr-TR").trim();
+      if (kullanilanAlanlar.has(alan)) continue; // aynı alandan ikinci soru olmasın
+
+      const beklenenHarf = String.fromCharCode(65 + soru.dogru);
+      process.stdout.write(
+        `  [${alan}] ${soru.soru} → ${beklenenHarf}) ${soru.secenekler[soru.dogru]} ... `
+      );
+
+      const sonuc = await soruDogrula(soru);
+      if (sonuc.gecti) {
+        console.log(`✓ ${sonuc.sebep}`);
+        dogrulanmis.push(soru);
+        kullanilanAlanlar.add(alan);
+      } else {
+        console.log(`✗ ELENDİ: ${sonuc.sebep}`);
+      }
+    }
+  }
+
+  if (dogrulanmis.length < MIN_SORU) {
+    throw new Error(
+      `Yeterli DOĞRULANMIŞ soru üretilemedi (${dogrulanmis.length}/${MIN_SORU}). ` +
+        "Yanlış bilgi yayınlamamak için işlem durduruldu; tekrar dene."
     );
-    quiz = aday;
   }
-  const kalanHatalar = dogrula(quiz);
-  if (kalanHatalar.length > 0) {
-    throw new Error("Geçerli quiz üretilemedi: " + kalanHatalar.join("; "));
+
+  if (dogrulanmis.length < HEDEF_SORU) {
+    console.warn(
+      `⚠️  ${HEDEF_SORU} soru hedeflendi, ${dogrulanmis.length} tanesi doğrulamadan geçti. ` +
+        "Video bu kadarıyla üretiliyor."
+    );
   }
-  quiz.sorular = quiz.sorular.map(siklariKaristir);
-  quiz.sorular.forEach((s, i) =>
-    console.log(
-      `  ${i + 1}. [${s.alan}] ${s.soru}  → ${String.fromCharCode(65 + s.dogru)}) ${
-        s.secenekler[s.dogru]
-      }`
-    )
-  );
+
+  const quiz = { ...(sonQuiz ?? {}), sorular: dogrulanmis };
+  console.log(`  → ${dogrulanmis.length} soru doğrulandı ve kullanılacak.`);
 
   console.log("\n=== 2/4 Ses efektleri hazırlanıyor ===");
   await run("node", ["scripts/makeSfx.mjs"]);
@@ -388,10 +523,12 @@ async function main() {
   for (let i = 0; i < quiz.sorular.length; i++) {
     const s = quiz.sorular[i];
 
-    const soruSes = await seslendir(
-      s.soru_anlatim || s.soru,
-      `quiz-soru-${i + 1}.mp3`
-    );
+    // Ekrandaki metnin AYNISI seslendiriliyor. Daha önce ayrı bir
+    // "soru_anlatim" alanı vardı ve model onu farklı yazabiliyordu; izleyici
+    // ekranda bir soru okurken kulağında başka bir soru duyuyordu
+    // (yayınlanan bir videoda bu yaşandı). Tek kaynak kullanmak uyuşmazlığı
+    // yapısal olarak imkânsız kılıyor.
+    const soruSes = await seslendir(s.soru, `quiz-soru-${i + 1}.mp3`);
     const cevapSes = await seslendir(
       s.cevap_anlatim,
       `quiz-cevap-${i + 1}.mp3`,
