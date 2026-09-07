@@ -335,6 +335,8 @@ async function main() {
   const rejectedTopics = [];
   // Reddedilen adayların süreleri; isteme "bu kadar uzundu, kıs" diye geri veriliyor.
   const uzunMetinler = [];
+  const kisaMetinler = [];
+  const bosKapanislar = [];
 
   const buildPrompt = () => `
 Sen Türkçe konuşan bir YouTube Shorts kanalı için içerik yazarısın.
@@ -345,6 +347,14 @@ Kanalın formatı: gerçekten yaşanmış ama BUGÜN HÂLÂ AÇIKLANAMAYAN bir o
 tarih, uydurma isim veya "bilim insanları şok oldu" tarzı abartı YAZMA. Gizem,
 olayın kendisinden gelmeli; süslemeden değil. Komplo teorisi anlatma, doğrulanmış
 olguyu anlat ve neyin açıklanamadığını söyle.
+
+DETAY DOĞRULUĞU (bu kural ihlal edilirse video çöp olur): Yer adı, tarih, sayı ve
+isimleri yalnızca EMİN olduğun durumda yaz. Emin değilsen o detayı hiç verme -
+yanlış bilgi vermektense az bilgi ver. Yanlış bir detay ("Atlantik'te batan gemi
+için Pasifik demek" gibi) videoyu bilen izleyicinin gözünde bitirir ve yorumlarda
+düzeltilir.
+Bu yüzden ÇOK İYİ BELGELENMİŞ, yaygın olarak bilinen vakaları seç; belirsiz veya
+tek kaynaklı hikâyelere girme. Coğrafyayı yazmadan önce bir daha düşün.
 
 ${
   cliTopic
@@ -366,6 +376,28 @@ Bu kategoride DAHA ÖNCE İŞLENMİŞ konular. Bunları ne aynen ne de başka ke
 tekrar etme; aynı nesne/eylem etrafında dönen bir varyasyon da sayılır, tamamen
 başka bir alt konuya geç:
 ${JSON.stringify(promptTopicList, null, 0)}`
+}${
+  bosKapanislar.length > 0
+    ? `
+
+DİKKAT - KAPANIŞ: Önceki denemende "gizem_metni" bir EKSİKLİK bildirerek bitti
+(${JSON.stringify(bosKapanislar[bosKapanislar.length - 1].slice(-60))}).
+Bu, videoyu bir yere bağlamadan bitiriyor. SON CÜMLE bir OLGU bildirmeli:
+bulunan ama açıklanamayan bir nesne, kayıtlardaki bir çelişki, bugün hâlâ
+devam eden somut bir durum. "bilinmiyor / bulunamadı / kanıtlanamadı /
+çözülemedi" gibi bir fiille BİTİRME.`
+    : ""
+}${
+  kisaMetinler.length > 0
+    ? `
+
+DİKKAT - FAZLA KISA: Önceki denemelerinde metin çok kısaydı (${kisaMetinler.join(
+        ", "
+      )} saniye; hedef ${HEDEF_MIN_SANIYE}-${HEDEF_MAKS_SANIYE} saniye). Hikâye
+kurulmadan bitiyor ve izleyici "ne olmuş?" diye soruyor. Bu sefer olayın ÖLÇEĞİNİ
+(kaç kişi, ne kadar büyük) ve açıklanamayan SOMUT detayı ekleyerek genişlet.
+Dolgu cümlesi ekleme; eksik olan bilgiyi ekle.`
+    : ""
 }${
   uzunMetinler.length > 0
     ? `
@@ -389,9 +421,14 @@ veya farklı bir eylem etrafında kurulu bir konu seç.`
 
 VİDEONUN YAPISI (4 parça, sırayla seslendirilecek):
 1. "hook_metni"  -> ilk 1.5-2.5 saniye. İzleyicinin parmağını durduran açılış.
-2. "olay_metni"  -> ne oldu / ne bulundu. Somut bilgi: yer, zaman, kim kaydetti.
-3. "gizem_metni" -> NEDEN hâlâ açıklanamıyor. Gerilimin zirvesi burası; denenen
-   açıklamalar ve neden yetersiz kaldıkları.
+2. "olay_metni"  -> NE OLDU. İzleyici bu bölümü okuyunca olayı tam olarak
+   anlamış olmalı. Zorunlu unsurlar: ne zaman, NEREDE (doğru yer adı), ne oldu ve
+   ÖLÇEĞİ - kaç kişi, ne kadar büyük, ne kadar sürdü. İnsan varsa mutlaka söyle;
+   "bir denizaltı kayboldu" değil, "99 mürettebatıyla birlikte kayboldu".
+3. "gizem_metni" -> NEDEN hâlâ açıklanamıyor. Gerilimin zirvesi burası.
+   En az BİR somut ve tuhaf detay ver (bulunan bir nesne, kaydedilen bir ses,
+   tarihlerin tutmaması, bir tanığın ifadesi gibi) ve denenen açıklamalardan
+   birini adıyla söyleyip neden yetersiz kaldığını belirt.
 4. "cta_metni"   -> beğen + abone daveti.
 
 HOOK KURALLARI (en kritik kısım - videonun izlenip izlenmemesini bu belirler):
@@ -405,8 +442,14 @@ HOOK KURALLARI (en kritik kısım - videonun izlenip izlenmemesini bu belirler):
 - İşe yarayan kalıplar: imkânsız görünen olgu ("Bu sinyal 40 yıldır her gün
   tekrarlıyor ve kaynağı bilinmiyor."), sayı + zaman ("150 yıldır aynı yerde
   görülüyor."), yer + tuhaflık ("Bu adaya kimse ayak basamıyor.").
-- İçinde SOMUT bir dayanak geçsin: yer adı, tarih, süre veya sayı. "İnanılmaz bir
+- İçinde SOMUT bir dayanak geçsin: yer adı, süre, ölçek veya sayı. "İnanılmaz bir
   gizem" gibi boş cümle YAZMA - merakı kuran şey somutluktur.
+- Hook bir ÇELİŞKİ ya da CEVAPSIZ SORU kurmalı, olayı tarif etmemeli.
+  Kötü: "Bu nükleer denizaltı okyanusun dibinde sessizce yatıyor." (sadece tarif,
+  ortada soru yok, "bu" neyi işaret ettiği belirsiz)
+  İyi: "99 kişilik bir denizaltı, mürettebatı fark etmeden batmış olamaz."
+- "Bu", "şu", "o" ile başlama; izleyici neden bahsettiğini bilmiyor. Neyden
+  bahsettiğini ilk cümlede söyle.
 - "Merhaba arkadaşlar", "Bugün sizlere", "Hadi başlayalım" gibi ısınma cümlesi YASAK.
 - Cevabı hook'ta VERME; sadece merakı aç. Zaten kesin cevap yok - bunu avantaja çevir.
 - "hook_ekran_metni": aynı hook'un ekranda dev punto yazılacak 2-5 kelimelik hali
@@ -423,7 +466,9 @@ ANLATIM TARZI (hook'tan sonraki bölümler için):
 
 Kurallar:
 - "olay_metni" 2 cümle, "gizem_metni" 2 cümle. hook + olay + gizem toplamı
-  45-55 kelime civarı olsun (20-25 saniye). BU SINIRI AŞMA.
+  65-78 kelime civarı olsun (29-34 saniye). Bu ALT sınır da bir hedeftir:
+  daha kısa yazarsan hikâye kurulmadan bitiyor ve izleyici "ne olmuş?" diye
+  soruyor. Anlaşılmayan kısa video, anlaşılan uzun videodan daha kötü tutulur.
   Sayı ve tarihleri sayarken dikkat: "1997" ve "150.000" tek kelime görünür ama
   seslendirmede 4-5 kelimelik süre alır. Metinde her yıl/büyük sayı için kendine
   4 kelime saymış gibi davran ve toplamı ona göre kıs. Video başına EN FAZLA
@@ -432,9 +477,15 @@ Kurallar:
   izlenip başa dönmesidir (loop). 25 saniyelik video tamamlanıp döner; 45 saniyelik
   video ortasında bırakılır. Anlatımı sıkıştır: süsleme ve dolgu cümlesi at,
   bilgiyi bırak.
-- "gizem_metni" CEVAPSIZ bitsin. Soruyu açık bırakmak hem yorum getirir hem videoyu
-  baştan izletir (loop). "Bilim insanları hâlâ cevap arıyor" gibi klişe bir kapanış
-  yazma; onun yerine açıklanamayan SOMUT detayı en sona koy.
+- "gizem_metni" CEVAPSIZ bitsin ama BOŞ bitmesin. Soruyu açık bırakmak hem yorum
+  getirir hem videoyu baştan izletir (loop).
+  YASAK: sadece olumsuz cümlelerle bitirmek. "Kanıt bulunamadı. İz yoktu. Açıklama
+  yapılamadı." gibi arka arkaya üç olumsuz, izleyiciye tutunacak hiçbir şey
+  bırakmıyor ve video "bir yere bağlanmadan" bitiyor.
+  Onun yerine son cümle SOMUT ve TUHAF bir olguyu söylesin: bulunan ama
+  açıklanamayan bir nesne, kayıtlardaki bir çelişki, hâlâ devam eden bir durum.
+  İyi kapanış: "Enkazın ilk parçası, geminin rotasının 600 kilometre uzağında
+  bulundu." Kötü kapanış: "Sebebi bugün hâlâ bilinmiyor."
 BAŞLIK (title) KURALLARI - feed'de tıklanmayı bu belirler:
 - EN FAZLA 50 KARAKTER. Shorts feed'inde başlık bu uzunluktan sonra kırpılıyor;
   vaadin kırpılan kısımda kalması tıklamayı doğrudan öldürür.
@@ -565,7 +616,9 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
   // Bu sabit tahminden değil, üretilen videoların ölçülmesinden geldi:
   // 64 ağırlıklı kelime -> 28.7 saniye.
   const KELIME_PER_SANIYE = 2.2;
-  const HEDEF_MAKS_SANIYE = 28;
+  const HEDEF_MAKS_SANIYE = 35;
+  // Alt sınır da denetleniyor: fazla kısa metin hikâyeyi kuramadan bitiriyor.
+  const HEDEF_MIN_SANIYE = 26;
 
   const kelimeler = (t) => String(t || "").trim().split(/\s+/).filter(Boolean);
   const kelimeSay = (t) => kelimeler(t).length;
@@ -574,6 +627,20 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
       const rakamlar = k.replace(/[^0-9]/g, "");
       return toplam + (rakamlar.length >= 3 ? SAYI_AGIRLIGI : 1);
     }, 0);
+  // Kapanış denetimi. "Bir yere bağlanmadan bitiyor" sorununun kaynağı, son
+  // cümlenin bir OLGU değil bir EKSİKLİK bildirmesi: "kaynağı bilinmiyor",
+  // "kanıtlanamadı", "çözülemedi". İzleyiciye tutunacak bir şey bırakmıyor.
+  // İstemde yasaklamak yetmedi; ölçüp reddediyoruz.
+  const BOS_KAPANIS =
+    /(bilinmiyor|bulunamad|a[çc][ıi]klanamad|kan[ıi]tlanamad|[çc][öo]z[üu]lemed|s[ıi]r olarak kald|cevap aran|belirlenemed|tespit edilemed)\p{L}*[.!?]?\s*$/iu;
+
+  const bosKapanisMi = (c) => {
+    const metin = String(c?.gizem_metni || "").trim();
+    if (!metin) return false;
+    const cumleler = metin.split(/(?<=[.!?])\s+/).filter(Boolean);
+    return BOS_KAPANIS.test(cumleler[cumleler.length - 1] || "");
+  };
+
   const tahminiSure = (c) =>
     [c?.hook_metni, c?.olay_metni, c?.gizem_metni].reduce(
       (t, b) => t + agirlikliSay(b),
@@ -593,14 +660,23 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
 
     // Metnin uzunluğunu isteme yazmak yetmiyor: model sınırı düzenli olarak
     // aşıyor ve video loop bandının dışına çıkıyor. Ölçüp reddediyoruz.
-    if (!duplicate && sure <= HEDEF_MAKS_SANIYE) {
+    const bosKapanis = bosKapanisMi(candidate);
+
+    if (
+      !duplicate &&
+      !bosKapanis &&
+      sure <= HEDEF_MAKS_SANIYE &&
+      sure >= HEDEF_MIN_SANIYE
+    ) {
       parsed = candidate;
       break;
     }
 
-    // Elde en kısa adayı tutuyoruz: hiçbir deneme sınırı tutturamazsa
-    // en azından en iyisini yayınlarız.
-    if (!parsed || sure < tahminiSure(parsed)) parsed = candidate;
+    // Hedef bandın ortasına en yakın adayı elde tutuyoruz: hiçbir deneme
+    // sınırı tutturamazsa en azından en dengelisini yayınlarız.
+    const hedefOrta = (HEDEF_MIN_SANIYE + HEDEF_MAKS_SANIYE) / 2;
+    const uzaklik = (c) => Math.abs(tahminiSure(c) - hedefOrta);
+    if (!parsed || uzaklik(candidate) < uzaklik(parsed)) parsed = candidate;
 
     if (duplicate) {
       rejectedTopics.push(candidate.topic);
@@ -608,11 +684,25 @@ SADECE aşağıdaki JSON formatında, başka hiçbir açıklama olmadan cevap ve
         `⚠️  "${candidate.topic}" daha önceki "${duplicate}" konusuyla fazla benzer ` +
           `(deneme ${attempt}/${MAX_ATTEMPTS}), yeniden üretiliyor...`
       );
-    } else {
+    } else if (bosKapanis) {
+      bosKapanislar.push(candidate.gizem_metni);
+      console.warn(
+        `⚠️  Kapanış boş bitiyor ("...${candidate.gizem_metni
+          .trim()
+          .slice(-45)}") ` +
+          `(deneme ${attempt}/${MAX_ATTEMPTS}), somut kapanışla yeniden üretiliyor...`
+      );
+    } else if (sure > HEDEF_MAKS_SANIYE) {
       uzunMetinler.push(Math.round(sure));
       console.warn(
-        `⚠️  Metin ~${Math.round(sure)} sn (hedef ${HEDEF_MAKS_SANIYE} sn altı) ` +
+        `⚠️  Metin ~${Math.round(sure)} sn, hedef ${HEDEF_MIN_SANIYE}-${HEDEF_MAKS_SANIYE} sn ` +
           `(deneme ${attempt}/${MAX_ATTEMPTS}), kısaltılarak yeniden üretiliyor...`
+      );
+    } else {
+      kisaMetinler.push(Math.round(sure));
+      console.warn(
+        `⚠️  Metin ~${Math.round(sure)} sn ile fazla kısa, hedef ${HEDEF_MIN_SANIYE}-${HEDEF_MAKS_SANIYE} sn ` +
+          `(deneme ${attempt}/${MAX_ATTEMPTS}), genişletilerek yeniden üretiliyor...`
       );
     }
   }
