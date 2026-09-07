@@ -30,7 +30,7 @@ const defaultProps: ShortVideoProps = {
   ],
   phases: [
     { label: "HOOK", color: "#F59E0B", startWordIndex: 0, badge: false },
-    { label: "OLAY", color: "#38BDF8", startWordIndex: 5, badge: true },
+    { label: "YANLIŞ", color: "#E23B3B", startWordIndex: 5, badge: true },
   ],
 };
 

@@ -1,6 +1,6 @@
 // scripts/generateVoice.mjs
 // Microsoft Edge TTS servisini (ücretsiz, API anahtarı GEREKMEZ) kullanarak
-// seslendirmeyi TEK PARÇA değil, HOOK / OLAY / AÇIKLANAMAYAN / ABONE OL bölümlerini
+// seslendirmeyi TEK PARÇA değil, HOOK / YANLIŞ / DOĞRU / ABONE OL bölümlerini
 // AYRI AYRI üretir. Her bölüme kademeli olarak biraz daha hızlı/canlı bir ton
 // veriyoruz - gerçek bir insanın konuşurken cümleden cümleye enerjisini
 // artırması gibi. Bölümler arasında (ses dosyaları ayrı olduğu için) doğal bir
@@ -44,20 +44,17 @@ const SEGMENTS = [
     pitchDelta: 2,
   },
   {
-    key: "olay_metni",
-    label: "OLAY",
-    color: "#38BDF8",
+    key: "yanlis_metni",
+    label: "YANLIŞ",
+    color: "#E23B3B",
     badge: true,
     rateDelta: 0,
     pitchDelta: 0,
   },
   {
-    // Gerilimin zirvesi: olayın neden hâlâ açıklanamadığı. Ses burada hafifçe
-    // hızlanıp yükseliyor, izleyicinin videoyu bırakmasını en çok bu bölüm
-    // engelliyor.
-    key: "gizem_metni",
-    label: "AÇIKLANAMAYAN",
-    color: "#A855F7",
+    key: "dogru_metni",
+    label: "DOĞRU",
+    color: "#2FB65A",
     badge: true,
     rateDelta: 3,
     pitchDelta: 1,

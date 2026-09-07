@@ -2,10 +2,10 @@
 
 Bu proje her çalıştırıldığında:
 0. **Arka plan müziğini** saf Node ile sentezler (indirme yok, telif riski yok — `public/music/` yoksa üretilir).
-1. **Google Gemini API (ücretsiz)** ile "gerçekten yaşanmış ama hâlâ açıklanamayan bir olay" temalı bir konu, **kanca (hook)**, seslendirme metni, YouTube başlığı/açıklama/etiketleri üretir. Konu, geçmiştekilerle benzerlik ölçülerek tekrar etmemesi sağlanır.
-2. **Microsoft Edge TTS (ücretsiz, API anahtarı gerekmez)** ile metni dört ayrı bölüm halinde (KANCA → OLAY → AÇIKLANAMAYAN → ABONE OL), her bölümde biraz artan enerjiyle Türkçe seslendirmeye çevirir ve kelime kelime zaman damgası alır.
+1. **Google Gemini API (ücretsiz)** ile "günlük hayatta yanlış yapılan bir iş ve doğrusu" temalı bir konu, **kanca (hook)**, seslendirme metni, YouTube başlığı/açıklama/etiketleri üretir. Konu, geçmiştekilerle benzerlik ölçülerek tekrar etmemesi sağlanır.
+2. **Microsoft Edge TTS (ücretsiz, API anahtarı gerekmez)** ile metni dört ayrı bölüm halinde (KANCA → YANLIŞ → DOĞRU → ABONE OL), her bölümde biraz artan enerjiyle Türkçe seslendirmeye çevirir ve kelime kelime zaman damgası alır.
 3. **Pexels (ücretsiz)**'ten konuya uygun 5 farklı dikey (9:16) stok video indirir.
-4. **Remotion** ile dikey Shorts videosunu render eder: ilk ~2.5 saniyede ekranı kaplayan kanca kartı, konuşulan kelimenin renkli vurgulandığı (karaoke tarzı) altyazı, "OLAY / AÇIKLANAMAYAN" rozetleri, üstte ilerleme çubuğu, kapanışta abone animasyonu ve kısık arka plan müziği.
+4. **Remotion** ile dikey Shorts videosunu render eder: ilk ~2.5 saniyede ekranı kaplayan kanca kartı, konuşulan kelimenin renkli vurgulandığı (karaoke tarzı) altyazı, "YANLIŞ / DOĞRU" rozetleri, üstte ilerleme çubuğu, kapanışta abone animasyonu ve kısık arka plan müziği.
 5. **YouTube Data API v3 (ücretsiz)** ile videoyu kanala Shorts olarak, Türkçe dil etiketiyle yükler.
 
 `node scripts/run.mjs` bu adımları sırayla çalıştırır. `.github/workflows/daily-short.yml` ile bunu her gün otomatik tetikleyebilirsin (bilgisayarının açık olması gerekmez, GitHub'ın sunucularında ücretsiz çalışır).
@@ -76,16 +76,12 @@ npm run preview
 YouTube bir kanalı bir kitleye oturtabilmek için **konu tutarlılığı** ister. 15 kategoriye birden yayılan bir kanalda algoritma "bunu kime göstereyim?" sorusuna cevap bulamaz ve gösterim vermez. Bu yüzden konu havuzu `.env` (veya Actions'ta repo variable) üzerinden daraltılabiliyor:
 
 ```
-CATEGORY_FILTER=Uzay & Evren Gizemleri,Çözülememiş Tarihi Gizemler,Okyanus & Derin Deniz
+CATEGORY_FILTER=Ev Tamiratı & Tadilat,Araba Bakımı & Sürüş,Ev Güvenliği & Acil Durum Bilgisi
 ```
 
-Bu üçlü kanalın **kendi ölçüm verisine** bakılarak seçildi. YouTube Analytics'ten çekilen 169 videoda gizem/uzay/tarih içerikleri açık ara önde çıktı (izlenme oranı %90-589), ev tamiratı ve verimlilik içerikleri ise %28-53 bandında kaldı.
+Bu üçlü bilinçli seçildi: üçü de **aynı izleyici profiline** hitap ediyor (evini ve arabasını kendi idare eden yetişkin), üçü de "yanlış yaparsan pahalıya patlar" temalı olduğu için izlenme oranı yüksek, ve Türkçe Shorts'ta mutfak/temizlik kadar doygun değiller. Arama trafiği de kalıcı: bir yıl sonra da izlenirler.
 
-İkinci ve en az onun kadar önemli sebep: **stok video bulunabilirliği.** Bu pipeline arka planı Pexels/Pixabay'den çekiyor. "installing new gas hose" diye bir stok klip yok; aramaların tamamı düşüp her sahne aynı yedek klibe kalıyordu. Gizem/uzay/okyanus nişinde ise görsel dağarcık hem bol hem konuyla uyumlu (yıldız alanı, nebula, derin okyanus, sis, antik kalıntı, eski harita). Ölçülen fark: eski nişte 5 sahnenin 1'i ilk denemede eşleşiyordu, yeni nişte 5'i de — hepsi %100 alaka ve hepsi dikey, kırpma yok.
-
-Üstelik bu türde atmosferik görüntü konuyla eşleşmiş sayılıyor; ev tamiratında izleyici tam o işlemi görmek istiyor ve göremeyince kaydırıyor.
-
-Boş bırakılırsa 7 kategorilik geniş havuz kullanılır. Geçerli kategori adları `scripts/generateScript.mjs` içindeki `ALL_CATEGORIES` listesinde.
+Boş bırakılırsa 15 kategorilik geniş havuz kullanılır. Geçerli kategori adları `scripts/generateScript.mjs` içindeki `ALL_CATEGORIES` listesinde.
 
 `CHANNEL_TAGS` ise her videoya eklenen sabit etiketlerdir; YouTube'un videolarını birbiriyle ilişkilendirip "sonraki video" trafiği üretmesine yardım eder.
 
