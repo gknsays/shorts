@@ -12,10 +12,18 @@ name: Shorts Scheduler (4x/gun)
 # yerleştirildi: öğle arası, öğleden sonra "altın saat" ve akşam boş vakti.
 #
 #  Yayin slotlari (scripts/slotGuard.mjs icinde tanimli):
-#    TRT 13:17  = UTC 10:17   (ogle zirvesi)
-#    TRT 16:23  = UTC 13:23   (ogleden sonra altin saat)
-#    TRT 19:17  = UTC 16:17   (aksam zirvesi)
-#    TRT 21:37  = UTC 18:37   (gece oncesi son dilim)
+#    TRT 10:12  = UTC 07:12   (sabah kusagi)
+#    TRT 14:17  = UTC 11:17   (ogle zirvesi sonrasi)
+#    TRT 17:23  = UTC 14:23   (ogleden sonra altin saat)
+#    TRT 20:17  = UTC 17:17   (aksam zirvesi)
+#    TRT 22:37  = UTC 19:37   (gece oncesi son dilim)
+#
+#  NEDEN BU SAATLER: Ayni kanalda quiz otomasyonu da calisiyor
+#  (gknsays/quizshorts) ve onun slotlari TRT 13:17 / 16:23 / 19:17 / 21:37.
+#  Bu hat bilincli olarak onlarin BIR SAAT SONRASINA kuruldu: ayni kanaldan
+#  ayni anda iki video ciktiginda YouTube her ikisine de daha kucuk bir
+#  baslangic gosterim havuzu ayiriyor ve videolar birbirinin izleyicisini
+#  yiyor. Bir saatlik aralik, ilk videonun dagitiminin oturmasina yetiyor.
 #
 #  ZAMANLAMA NEDEN BOYLE KURULDU?
 #  GitHub Actions'in zamanlanmis isleri garanti degil; kendi belgelerinde
@@ -33,7 +41,9 @@ on:
   schedule:
     # Her 20 dakikada bir yoklanır; asıl karari scripts/slotGuard.mjs verir.
     # Boylece GitHub tetiklemelerin cogunu dusurse bile slot kacmaz.
-    - cron: "*/20 10-21 * * *"
+    # Pencere ilk slotu (07:12 UTC) ve son slotun (19:37 UTC) 3 saatlik
+    # telafi suresini kapsiyor.
+    - cron: "*/20 7-23 * * *"
   workflow_dispatch:
     inputs:
       force:
