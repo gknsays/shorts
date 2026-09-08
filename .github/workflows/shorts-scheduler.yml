@@ -36,9 +36,12 @@ on:
   schedule:
     # Her 20 dakikada bir yoklanır; asıl karari scripts/slotGuard.mjs verir.
     # Boylece GitHub tetiklemelerin cogunu dusurse bile slot kacmaz.
-    # Pencere ilk slotu (09:12 UTC) ve son slotun (19:12 UTC) 3 saatlik
-    # telafi suresini kapsiyor.
-    - cron: "*/20 9-22 * * *"
+    # NEDEN */20 DEGIL: "*/20" yazildiginda GitHub tetiklemelerin neredeyse
+    # tamamini dusuruyordu - olculen gercek aralik ~3 saatti (18:59, 21:57,
+    # 00:06). Sik cron'lar agir sekilde kisiliyor. Bunun yerine gunde 6 kez,
+    # dogrudan slot saatlerinde ve birer saat sonrasinda (yedek) tetikliyoruz.
+    # Slot saatleri UTC 09:12 / 14:12 / 19:12.
+    - cron: "12 9,10,14,15,19,20 * * *"
   workflow_dispatch:
     inputs:
       force:

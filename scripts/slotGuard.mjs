@@ -42,7 +42,11 @@ const SLOTS = ["09:12", "14:12", "19:12"];
 
 // Bir slot kaçırıldıysa en fazla bu kadar süre sonra hâlâ telafi edilir.
 // Bunun ötesinde slot düşer - gece yarısı öğle videosunu atmanın anlamı yok.
-const CATCHUP_HOURS = 3;
+//
+// 3 saatten 2'ye indirildi: GitHub Actions tetiklemeleri ~3 saat gecikmeyle
+// geldiği için TRT 22:12 slotu gece 01:02'de yayınlanmıştı. O saatte izleyici
+// yok; videoyu ölü bir saatte yakmaktansa slotu düşürmek daha doğru.
+const CATCHUP_HOURS = 2;
 
 function loadState() {
   try {
