@@ -1,57 +1,69 @@
-name: Shorts Scheduler (4x/gun)
+name: Shorts Scheduler (pratik bilgi, 2x/gun)
 
-# NEDEN 10 DEĞİL DE 4?
-# Aynı kanaldan gün içinde çok sayıda video çıktığında YouTube bunların her
-# birine daha küçük bir başlangıç gösterim havuzu ayırır ve videolar birbirinin
-# izleyicisini yer. Kanal henüz oturmamışken doğru strateji, gösterimi az
-# sayıda videoda yoğunlaştırıp izlenme oranını (retention) yukarı çekmektir.
-# İzlenme oranı düzelip videolar düzenli olarak 1000+ görüntülenmeye ulaşmaya
-# başladığında sıklığı kademeli artırabilirsin (önce 6, sonra 8).
+# BU DEPO GUNDE KAC VIDEO ATIYOR?
+# Kanalda iki ayri nis donusumlu yayinlaniyor ve saatler birbirine girmeyecek
+# sekilde bolundu:
+#    TRT 07:00  quiz         (gknsays/quizshorts deposu)
+#    TRT 11:00  pratik bilgi <- BU DEPO
+#    TRT 14:00  quiz         (gknsays/quizshorts deposu)
+#    TRT 17:00  pratik bilgi <- BU DEPO
+#    TRT 19:30  quiz         (gknsays/quizshorts deposu)
+# Yani bu depo gunde 2 video atiyor, kanaldan toplam 5 video cikiyor.
 #
-# Saatler Türkiye saatine (TRT, UTC+3) göre en yüksek etkileşim pencerelerine
-# yerleştirildi: öğle arası, öğleden sonra "altın saat" ve akşam boş vakti.
-#
-#  Yayin slotlari (scripts/slotGuard.mjs icinde tanimli):
-#    TRT 12:12  = UTC 09:12   (ogle)
-#    TRT 17:12  = UTC 14:12   (okul/is cikisi)
-#    TRT 22:12  = UTC 19:12   (gece dilimi)
-#
-#  Ayni kanalda ikinci bir otomasyon calisiyor (gknsays/quizshorts) ve onun
-#  slotlari bunlarin ARASINDA: TRT 10:12 / 15:12 / 20:12. Kanaldan gun
-#  boyunca 6 video cikiyor, iki video arasinda en az 2 saat var.
+# Ayni kanaldan gun icinde cok sayida video ciktiginda YouTube bunlarin her
+# birine daha kucuk bir baslangic gosterim havuzu ayirir ve videolar
+# birbirinin izleyicisini yer. Bu yuzden iki video arasinda en az 3 saat var.
 #
 #  ZAMANLAMA NEDEN BOYLE KURULDU?
-#  GitHub Actions'in zamanlanmis isleri garanti degil; kendi belgelerinde
-#  "yogunluk donemlerinde gecikebilir veya calismayabilir" yaziyor. Nitekim
-#  TRT 13:00 tetiklemesi hic calismadi ve o gunun videosu cikmadi.
+#  GitHub Actions'in zamanlanmis isleri ne garanti ne de dakikinde calisir.
+#  Bu depoda olculen gercek davranis (8 Eylul 2026, cron 09:12/10:12/14:12/
+#  15:12/19:12/20:12 UTC iken): tetiklemeler 13:37, 17:54, 21:50 ve 00:06'da
+#  geldi - yani 1.5 ile 4.5 saat arasi GECIKMELI, ustelik alti tetiklemenin
+#  ikisi hic gelmedi.
 #
-#  Bu yuzden tek bir cron'a guvenmiyoruz: cron her 20 dakikada bir YOKLUYOR,
-#  asil karari slotGuard veriyor. Bekci, gecmis slotlardan yayinlanmamis olan
-#  var mi diye bakar; yoksa is ~20 saniyede sonlanir, varsa pipeline calisir ve
-#  slot data/slots.json'a islenir. Boylece GitHub tetiklemelerin cogunu
-#  dusurse bile slottan sonraki ilk basarili yoklamada video cikar, ve ayni
-#  slot icin ikinci kez cikmaz.
-
+#  Bu yuzden "sabit slot + kisa telafi penceresi" tasarimi calismiyordu:
+#  gecikme telafi penceresinden uzun oldugu icin her tetikleme pencere
+#  kapandiktan sonra geliyor, bekci "bekleyen slot yok" deyip isi 8 saniyede
+#  bitiriyordu. Is yesil gorunuyordu ama gun boyu tek video cikmiyordu.
+#
+#  YENI TASARIM: cron gun boyu saat basi YOKLUYOR, asil karari
+#  scripts/slotGuard.mjs veriyor ve dakikaya degil siraya + araliga bakiyor:
+#    - gunun kotasi (2) dolmadiysa,
+#    - siradaki videonun en erken saati gectiyse (UTC 08:00 / 14:00,
+#      yani TRT 11:00 / 17:00),
+#    - yayin penceresi kapanmadiysa (UTC 20:00 = TRT 23:00),
+#    - ve son videonun ustunden en az 180 dakika gectiyse
+#  video uretilir. Tetikleme 30 dakika da gecikse 4 saat de gecikse video
+#  cikar; sadece izleyicinin olmadigi gece saatlerine kaymaz.
+#  Sartlar tutmayan tetiklemelerde is ~10 saniyede sonlanir.
 on:
   schedule:
-    # Her 20 dakikada bir yoklanır; asıl karari scripts/slotGuard.mjs verir.
-    # Boylece GitHub tetiklemelerin cogunu dusurse bile slot kacmaz.
-    # NEDEN */20 DEGIL: "*/20" yazildiginda GitHub tetiklemelerin neredeyse
-    # tamamini dusuruyordu - olculen gercek aralik ~3 saatti (18:59, 21:57,
-    # 00:06). Sik cron'lar agir sekilde kisiliyor. Bunun yerine gunde 6 kez,
-    # dogrudan slot saatlerinde ve birer saat sonrasinda (yedek) tetikliyoruz.
-    # Slot saatleri UTC 09:12 / 14:12 / 19:12.
-    - cron: "12 9,10,14,15,19,20 * * *"
+    # Gun boyu saat basi yoklanir; asil karari scripts/slotGuard.mjs verir.
+    # NEDEN BU KADAR SIK: GitHub tetiklemeleri hem geciktiriyor hem de bir
+    # kismini hic gondermiyor. Ne kadar cok yoklama denemesi olursa, yayin
+    # penceresi icine dusen en az bir tetikleme yakalama sansi o kadar yuksek.
+    # Bosa gecen yoklamalar bekcide ~10 saniyede sonlandigi icin maliyeti yok.
+    # Dakika 07: tam saat baslari GitHub tarafinda en yogun an, oradan kaciyoruz.
+    - cron: "7 8,9,10,11,12,13,14,15,16,17,18,19,20 * * *"
   workflow_dispatch:
     inputs:
       force:
         description: "Slot bekcisini atla ve hemen video uret"
         type: boolean
         default: true
-    # NOT: Bu is disaridan da tetiklenebiliyor (GitHub'in kendi zamanlayicisi bu
-    # depoda calismadigi icin). Disaridan gelen tetiklemeler "force" gondermez,
-    # bu yuzden bekci normal calisir ve ayni slot icin ikinci video uretilmez.
-    # Actions arayuzundeki "Run workflow" butonu ise force=true ile gelir.
+    # Actions arayuzundeki "Run workflow" butonu force=true ile gelir, yani
+    # bekciyi atlar ve hemen video uretir. Bu calistirma gunluk kotaya
+    # islenmez (slotGuard "manual" slotunu kaydetmez).
+    #
+    # GitHub'in cron'una hic guvenmek istemezsen bu is disaridan da
+    # tetiklenebilir; ucretsiz bir zamanlayici (ornegin cron-job.org) su
+    # istegi atsa yeterli:
+    #   POST https://api.github.com/repos/gknsays/shorts/actions/workflows/
+    #        shorts-scheduler.yml/dispatches
+    #   Authorization: Bearer <actions:write yetkili PAT>
+    #   Govde: {"ref":"main"}
+    # Govdeye "inputs" konulmadigi icin force gonderilmez, bekci normal
+    # calisir; yani disaridan saat basi tetiklemek fazladan video uretmez.
 
 permissions:
   contents: write # data/used-topics.json'u geri commit'leyebilmek için
@@ -73,8 +85,8 @@ jobs:
           persist-credentials: true
 
       # Bekci: bu tetiklemede gercekten video uretilecek mi?
-      # Cogu tetikleme burada durur ve is ~20 saniyede biter.
-      - name: Yayin slotu kontrolu
+      # Cogu tetikleme burada durur ve is ~10 saniyede biter.
+      - name: Yayin kontrolu
         id: guard
         run: |
           if [ "${{ inputs.force }}" = "true" ]; then
@@ -155,7 +167,7 @@ jobs:
           path: out/short.mp4
           retention-days: 7
 
-      - name: Slotu işaretle ve durumu geri kaydet
+      - name: Yayını işle ve durumu geri kaydet
         if: success() && steps.guard.outputs.should_run == 'true'
         env:
           SLOT: ${{ steps.guard.outputs.slot }}

@@ -1,23 +1,29 @@
 // scripts/slotGuard.mjs
-// "Bu yayın slotu için video atıldı mı?" sorusunu cevaplayan bekçi.
+// "Şimdi video atılmalı mı?" sorusunu cevaplayan bekçi.
 //
-// NEDEN GEREKLİ?
-// GitHub Actions'ın zamanlanmış işleri garanti değil: kendi belgelerinde
-// "yoğunluk dönemlerinde gecikebilir veya çalışmayabilir" yazıyor. Nitekim
-// TRT 13:00 tetiklemesi hiç çalışmadı. Tek bir cron'a güvenmek, o tetikleme
-// düştüğünde o günkü videonun hiç çıkmaması demek.
+// NEDEN SABİT SLOT DEĞİL DE PENCERE?
+// GitHub Actions'ın zamanlanmış işleri ne garanti ne de dakikinde çalışır.
+// Bu depoda ölçülen gerçek davranış (8 Eylül 2026, cron 09:12/10:12/14:12/
+// 15:12/19:12/20:12 UTC iken): tetiklemeler 13:37, 17:54, 21:50 ve 00:06'da
+// geldi - yani 1.5 ile 4.5 saat arası GECİKMELİ, üstelik altı tetiklemenin
+// ikisi hiç gelmedi.
 //
-// ÇÖZÜM: cron'u sık çalıştırıp (20 dakikada bir) asıl kararı buraya bırakmak.
-// Bu script, geçmiş slotlardan henüz yayınlanmamış olan var mı diye bakar:
-//   - varsa  -> should_run=true, pipeline çalışır, slot başarıyla bitince işaretlenir
-//   - yoksa  -> should_run=false, iş saniyeler içinde çıkar (pahalı adımlara girmez)
+// Eski tasarım sabit slot + 2 saatlik telafi penceresi kullanıyordu. Gecikme
+// telafi penceresinden uzun olduğu için HER tetikleme pencere kapandıktan
+// sonra geliyor, bekçi "bekleyen slot yok" deyip işi 8 saniyede bitiriyordu.
+// İş "success" görünüyordu ama gün boyu tek video çıkmıyordu.
 //
-// Böylece GitHub tetiklemelerin çoğunu düşürse bile, slottan sonraki İLK
-// başarılı yoklamada video çıkar; ve aynı slot için ikinci kez çıkmaz.
+// YENİ TASARIM: dakikaya değil, sıraya ve aralığa bakıyoruz. Tetikleme ne
+// zaman gelirse gelsin şu üç şart sağlanıyorsa video üretilir:
+//   1) Günün video kotası dolmamış  (EN_ERKEN.length adet)
+//   2) Sıradaki videonun en erken saati geçmiş ve yayın penceresi kapanmamış
+//   3) Bir önceki videonun üstünden en az MIN_ARALIK_DK geçmiş
+// Böylece tetikleme 30 dakika da gecikse 4 saat de gecikse video çıkar;
+// sadece izleyicinin olmadığı saatlere kaymaz.
 //
 // Kullanım:
 //   node scripts/slotGuard.mjs check   -> GITHUB_OUTPUT'a should_run / slot yazar
-//   node scripts/slotGuard.mjs done    -> içinde bulunulan slotu yayınlandı işaretler
+//   node scripts/slotGuard.mjs done    -> yayınlanan saati güne işler
 
 import fs from "node:fs";
 import path from "node:path";
@@ -25,28 +31,34 @@ import path from "node:path";
 const DATA_DIR = path.resolve("data");
 const STATE_FILE = path.join(DATA_DIR, "slots.json");
 
-// Yayın slotları, UTC olarak. TRT = UTC+3.
-//   09:12 UTC = 12:12 TRT   (öğle)
-//   14:12 UTC = 17:12 TRT   (okul/iş çıkışı)
-//   19:12 UTC = 22:12 TRT   (gece dilimi)
+// Günün n'inci videosu bu saatten ÖNCE atılmaz (UTC). TRT = UTC+3.
+//   08:00 UTC = 11:00 TRT   (öğleye doğru)
+//   14:00 UTC = 17:00 TRT   (okul/iş çıkışı)
+// Bunlar "tam bu saatte at" değil, "bu saatten sonra ilk fırsatta at"
+// demek. Gecikme eklenince pratikte TRT 12:00-15:00 ve 18:00-21:00
+// aralıklarına düşüyor.
 //
-// Aynı kanalda ikinci bir otomasyon çalışıyor (gknsays/quizshorts) ve onun
-// slotları bunların ARASINDA: TRT 10:12 / 15:12 / 20:12. Kanaldan gün
-// boyunca 6 video çıkıyor ve iki video arasında en az 2 saat var. Aynı
-// kanaldan kısa aralıkla çıkan videolar YouTube'un ayırdığı başlangıç
-// gösterim havuzunu bölüşüyor ve birbirinin izleyicisini yiyor.
-//
-// Saatler bilinçli olarak tam saat başında DEĞİL: GitHub Actions'ın
-// zamanlanmış işleri saat başlarında yoğunlaşıyor ve tetiklemeler düşüyor.
-const SLOTS = ["09:12", "14:12", "19:12"];
+// Kanalda İKİ AYRI NİŞ dönüşümlü yayınlanıyor ve saatler birbirine
+// girmeyecek şekilde bölündü:
+//   TRT 07:00  quiz        (gknsays/quizshorts deposu)
+//   TRT 11:00  pratik bilgi <- bu depo
+//   TRT 14:00  quiz        (gknsays/quizshorts deposu)
+//   TRT 17:00  pratik bilgi <- bu depo
+//   TRT 19:30  quiz        (gknsays/quizshorts deposu)
+// Yani bu depo günde 2 video atıyor; kalan 3'ü quiz deposunun işi.
+const EN_ERKEN = ["08:00", "14:00"];
 
-// Bir slot kaçırıldıysa en fazla bu kadar süre sonra hâlâ telafi edilir.
-// Bunun ötesinde slot düşer - gece yarısı öğle videosunu atmanın anlamı yok.
-//
-// 3 saatten 2'ye indirildi: GitHub Actions tetiklemeleri ~3 saat gecikmeyle
-// geldiği için TRT 22:12 slotu gece 01:02'de yayınlanmıştı. O saatte izleyici
-// yok; videoyu ölü bir saatte yakmaktansa slotu düşürmek daha doğru.
-const CATCHUP_HOURS = 2;
+// Yayın penceresinin kapanışı (UTC). 20:00 UTC = 23:00 TRT.
+// Bundan sonra gelen tetikleme video üretmez: gece 02:00'de video atmak
+// videoyu ölü bir saatte yakmak demek, slotu düşürmek daha doğru.
+const PENCERE_BITIS = "20:00";
+
+// Bu deponun iki videosu arasında en az bu kadar süre olsun. Aynı kanaldan
+// kısa aralıkla çıkan videolar YouTube'un ayırdığı başlangıç gösterim
+// havuzunu bölüşüyor ve birbirinin izleyicisini yiyor. Nominal aralık 6 saat
+// (TRT 11:00 -> 17:00); 3 saat, ilk video gecikmeli çıktığında ikincisinin
+// hemen ardına yapışmasını engelliyor.
+const MIN_ARALIK_DK = 180;
 
 function loadState() {
   try {
@@ -70,27 +82,17 @@ const pad = (n) => String(n).padStart(2, "0");
 const todayKey = (d) =>
   `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 
-function slotMinutes(slot) {
-  const [h, m] = slot.split(":").map(Number);
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
 }
 
-// Şu ana göre: telafi penceresi içinde olan ve henüz yayınlanmamış en yeni slot.
-// En yeniden başlıyoruz; iki slot birden kaçtıysa eskisini atlayıp güncel olanı
-// yayınlamak daha doğru (bayat içerik yerine zamanında içerik).
-function findPendingSlot(now, state) {
-  const key = todayKey(now);
-  const done = new Set(state[key] || []);
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-
-  for (const slot of [...SLOTS].reverse()) {
-    const start = slotMinutes(slot);
-    const gecikme = nowMin - start;
-    if (gecikme >= 0 && gecikme <= CATCHUP_HOURS * 60 && !done.has(slot)) {
-      return { slot, gecikmeDakika: gecikme };
-    }
-  }
-  return null;
+// Bugün yayınlananların en geç olanı (dakika cinsinden), yoksa null.
+function sonYayinDakikasi(yayinlananlar) {
+  const dakikalar = yayinlananlar
+    .map(toMinutes)
+    .filter((n) => Number.isFinite(n));
+  return dakikalar.length ? Math.max(...dakikalar) : null;
 }
 
 function writeOutput(lines) {
@@ -99,11 +101,40 @@ function writeOutput(lines) {
   fs.appendFileSync(out, lines.join("\n") + "\n");
 }
 
+function karar(nowMin, yayinlananlar) {
+  const sira = yayinlananlar.length;
+
+  if (sira >= EN_ERKEN.length) {
+    return { calis: false, sebep: `Günün ${EN_ERKEN.length} videosu da atılmış.` };
+  }
+  if (nowMin > toMinutes(PENCERE_BITIS)) {
+    return {
+      calis: false,
+      sebep: `Yayın penceresi kapandı (${PENCERE_BITIS} UTC). Kalan videolar bugün atlanıyor.`,
+    };
+  }
+  if (nowMin < toMinutes(EN_ERKEN[sira])) {
+    return {
+      calis: false,
+      sebep: `${sira + 1}. video en erken ${EN_ERKEN[sira]} UTC'de atılabilir.`,
+    };
+  }
+  const son = sonYayinDakikasi(yayinlananlar);
+  if (son !== null && nowMin - son < MIN_ARALIK_DK) {
+    return {
+      calis: false,
+      sebep: `Son videonun üstünden ${nowMin - son} dk geçti, en az ${MIN_ARALIK_DK} dk gerekiyor.`,
+    };
+  }
+  return { calis: true, sira: sira + 1 };
+}
+
 function main() {
   const command = process.argv[2] || "check";
   const now = new Date();
   const state = loadState();
   const key = todayKey(now);
+  const saatUtc = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`;
 
   if (command === "done") {
     const slot = process.env.SLOT;
@@ -111,34 +142,35 @@ function main() {
       console.error("SLOT ortam değişkeni yok, işaretlenemedi.");
       process.exit(1);
     }
-    // Elle tetiklenen çalıştırmalar bir slota ait değil; işaretlenirse o günün
-    // zamanlanmış videosu atlanmış olur.
+    // Elle tetiklenen çalıştırmalar kotaya sayılmaz; işaretlenirse o günün
+    // zamanlanmış videolarından biri atlanmış olur.
     if (slot === "manual") {
-      console.log("Manuel çalıştırma, slot işaretlenmiyor.");
+      console.log("Manuel çalıştırma, kotaya işlenmiyor.");
       return;
     }
-    state[key] = [...new Set([...(state[key] || []), slot])];
+    state[key] = [...new Set([...(state[key] || []), slot])].sort();
     saveState(state);
-    console.log(`✅ ${key} ${slot} slotu yayınlandı olarak işaretlendi.`);
+    console.log(`✅ ${key} ${slot} yayınlandı olarak işlendi.`);
     return;
   }
 
-  const pending = findPendingSlot(now, state);
-  const saatUtc = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`;
+  const yayinlananlar = state[key] || [];
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const sonuc = karar(nowMin, yayinlananlar);
 
   console.log(`Şu an (UTC): ${key} ${saatUtc}`);
-  console.log(`Bugün yayınlanan slotlar: ${(state[key] || []).join(", ") || "yok"}`);
+  console.log(`Bugün atılanlar: ${yayinlananlar.join(", ") || "yok"}`);
 
-  if (!pending) {
-    console.log("→ Bekleyen slot yok, bu tetikleme boşa çalışmayacak.");
+  if (!sonuc.calis) {
+    console.log(`→ Video üretilmeyecek. ${sonuc.sebep}`);
     writeOutput(["should_run=false"]);
     return;
   }
 
-  console.log(
-    `→ ${pending.slot} slotu bekliyor (${pending.gecikmeDakika} dakika gecikmeli). Pipeline çalışacak.`
-  );
-  writeOutput(["should_run=true", `slot=${pending.slot}`]);
+  console.log(`→ Günün ${sonuc.sira}. videosu üretilecek (${saatUtc} UTC).`);
+  // Slot etiketi olarak tetiklemenin geldiği saati kullanıyoruz; sabit slot
+  // saatleri artık yok, gerçekte ne zaman yayınlandığı bilgisi daha değerli.
+  writeOutput(["should_run=true", `slot=${saatUtc}`]);
 }
 
 main();
