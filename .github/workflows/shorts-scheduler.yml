@@ -1,50 +1,40 @@
 name: Shorts Scheduler (pratik bilgi, 2x/gun)
 
-# BU DEPO GUNDE KAC VIDEO ATIYOR?
-# Kanalda iki ayri nis donusumlu yayinlaniyor ve saatler birbirine girmeyecek
-# sekilde bolundu:
-#    TRT 07:00  quiz         (gknsays/quizshorts deposu)
-#    TRT 11:00  pratik bilgi <- BU DEPO
-#    TRT 14:00  quiz         (gknsays/quizshorts deposu)
-#    TRT 17:00  pratik bilgi <- BU DEPO
-#    TRT 19:30  quiz         (gknsays/quizshorts deposu)
-# Yani bu depo gunde 2 video atiyor, kanaldan toplam 5 video cikiyor.
+# YAYIN SAATLERI (TRT), kanaldaki iki nis donusumlu:
+#    07:00  quiz         (gknsays/quizshorts deposu)
+#    11:00  pratik bilgi <- BU DEPO
+#    14:00  quiz         (gknsays/quizshorts deposu)
+#    17:00  pratik bilgi <- BU DEPO
+#    19:30  quiz         (gknsays/quizshorts deposu)
+# Bu depo gunde 2 video atiyor, kanaldan toplam 5 video cikiyor.
 #
-# Ayni kanaldan gun icinde cok sayida video ciktiginda YouTube bunlarin her
-# birine daha kucuk bir baslangic gosterim havuzu ayirir ve videolar
-# birbirinin izleyicisini yer. Bu yuzden iki video arasinda en az 3 saat var.
+#  YAYIN SAATI NASIL TUTTURULUYOR?
+#  GitHub Actions'in cron'u dakikinde calismiyor: bu depoda olculen gercek
+#  davranis (8 Eylul 2026) tetiklemelerin 1.5-4.5 saat GECIKMELI geldigi,
+#  bir kismininsa hic gelmedigi yonunde. Yayin saatini "isin calistigi an"a
+#  baglarsan bu gecikmeyi yenmek mumkun degil.
 #
-#  ZAMANLAMA NEDEN BOYLE KURULDU?
-#  GitHub Actions'in zamanlanmis isleri ne garanti ne de dakikinde calisir.
-#  Bu depoda olculen gercek davranis (8 Eylul 2026, cron 09:12/10:12/14:12/
-#  15:12/19:12/20:12 UTC iken): tetiklemeler 13:37, 17:54, 21:50 ve 00:06'da
-#  geldi - yani 1.5 ile 4.5 saat arasi GECIKMELI, ustelik alti tetiklemenin
-#  ikisi hic gelmedi.
+#  Bu yuzden yayin saati tetiklemeden AYRILDI:
+#    1) Video hedef saatten 5 saate kadar ONCE uretiliyor.
+#    2) YouTube'a "private + publishAt" ile yukleniyor.
+#    3) Videoyu yayina alma isini YouTube yapiyor - dakikasi dakikasina.
+#  Yani is TRT 06:20'de de calissa 10:40'ta da calissa, video TRT 11:00'de
+#  yayina giriyor. GitHub'in gecikmesi artik yayin saatini kaydirmiyor.
 #
-#  Bu yuzden "sabit slot + kisa telafi penceresi" tasarimi calismiyordu:
-#  gecikme telafi penceresinden uzun oldugu icin her tetikleme pencere
-#  kapandiktan sonra geliyor, bekci "bekleyen slot yok" deyip isi 8 saniyede
-#  bitiriyordu. Is yesil gorunuyordu ama gun boyu tek video cikmiyordu.
-#
-#  YENI TASARIM: cron gun boyu saat basi YOKLUYOR, asil karari
-#  scripts/slotGuard.mjs veriyor ve dakikaya degil siraya + araliga bakiyor:
-#    - gunun kotasi (2) dolmadiysa,
-#    - siradaki videonun en erken saati gectiyse (UTC 08:00 / 14:00,
-#      yani TRT 11:00 / 17:00),
-#    - yayin penceresi kapanmadiysa (UTC 20:00 = TRT 23:00),
-#    - ve son videonun ustunden en az 180 dakika gectiyse
-#  video uretilir. Tetikleme 30 dakika da gecikse 4 saat de gecikse video
-#  cikar; sadece izleyicinin olmadigi gece saatlerine kaymaz.
-#  Sartlar tutmayan tetiklemelerde is ~10 saniyede sonlanir.
+#  Yalnizca hicbir tetikleme hedef saatten once gelmezse (GitHub o pencerede
+#  tamamen sessiz kalirsa) video gecikir; o durumda 3 saat boyunca hala
+#  uretilir ama zamanlanmadan dogrudan yayinlanir.
+
 on:
   schedule:
-    # Gun boyu saat basi yoklanir; asil karari scripts/slotGuard.mjs verir.
-    # NEDEN BU KADAR SIK: GitHub tetiklemeleri hem geciktiriyor hem de bir
-    # kismini hic gondermiyor. Ne kadar cok yoklama denemesi olursa, yayin
-    # penceresi icine dusen en az bir tetikleme yakalama sansi o kadar yuksek.
+    # Saatler UTC. TRT = UTC+3 (Turkiye 2016'dan beri yaz saati uygulamiyor).
+    # UTC 03:00 = TRT 06:00 -> ilk videonun uretim penceresinin acilisi
+    # UTC 17:00 = TRT 20:00 -> ikinci videonun son telafi ani
+    # Aradaki her saat yoklaniyor: tetiklemeler duzensiz geldigi icin ne kadar
+    # cok deneme olursa hedef saatten once uretim yapma sansi o kadar yuksek.
     # Bosa gecen yoklamalar bekcide ~10 saniyede sonlandigi icin maliyeti yok.
     # Dakika 07: tam saat baslari GitHub tarafinda en yogun an, oradan kaciyoruz.
-    - cron: "7 8,9,10,11,12,13,14,15,16,17,18,19,20 * * *"
+    - cron: "7 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -151,6 +141,10 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REDIRECT_URI: ${{ secrets.YT_REDIRECT_URI }}
           YT_PRIVACY_STATUS: ${{ secrets.YT_PRIVACY_STATUS }}
+          # Videonun YouTube'da yayina girecegi tam an (RFC3339, UTC).
+          # scripts/slotGuard.mjs hesapliyor, scripts/upload.mjs uyguluyor.
+          # Bos ise video dogrudan yayinlanir (gecikmis yayin telafisi).
+          PUBLISH_AT: ${{ steps.guard.outputs.publish_at }}
           # Kanalın nişi. Buradaki kategoriler dışına çıkılmaz.
           # Repo > Settings > Secrets and variables > Actions > Variables
           # altında CATEGORY_FILTER tanımlarsan o kullanılır; yoksa aşağıdaki

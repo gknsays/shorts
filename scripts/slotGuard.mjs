@@ -1,29 +1,27 @@
 // scripts/slotGuard.mjs
-// "Şimdi video atılmalı mı?" sorusunu cevaplayan bekçi.
+// "Simdi video hazirlanmali mi, hazirlanirsa kacta yayinlanmali?" sorusunu
+// cevaplayan bekci.
 //
-// NEDEN SABİT SLOT DEĞİL DE PENCERE?
-// GitHub Actions'ın zamanlanmış işleri ne garanti ne de dakikinde çalışır.
-// Bu depoda ölçülen gerçek davranış (8 Eylül 2026, cron 09:12/10:12/14:12/
-// 15:12/19:12/20:12 UTC iken): tetiklemeler 13:37, 17:54, 21:50 ve 00:06'da
-// geldi - yani 1.5 ile 4.5 saat arası GECİKMELİ, üstelik altı tetiklemenin
-// ikisi hiç gelmedi.
+// SORUN NEYDI?
+// GitHub Actions'in zamanlanmis isleri ne garanti ne de dakikinde calisir.
+// Bu depoda olculen gercek davranis (8 Eylul 2026): tetiklemeler 13:37,
+// 17:54, 21:50 ve 00:06'da geldi - yani 1.5 ile 4.5 saat arasi GECIKMELI,
+// ustelik alti tetiklemenin ikisi hic gelmedi. Yayin saatini tetikleme
+// saatine bagladigin surece bu gecikmeyi yenmenin yolu yok.
 //
-// Eski tasarım sabit slot + 2 saatlik telafi penceresi kullanıyordu. Gecikme
-// telafi penceresinden uzun olduğu için HER tetikleme pencere kapandıktan
-// sonra geliyor, bekçi "bekleyen slot yok" deyip işi 8 saniyede bitiriyordu.
-// İş "success" görünüyordu ama gün boyu tek video çıkmıyordu.
+// COZUM: yayin saatini tetiklemeden AYIRMAK.
+// Video hedef saatten saatler once uretiliyor ve YouTube'a "private +
+// publishAt" ile yukleniyor. Yayina alma isini YouTube yapiyor ve YouTube
+// dakikasi dakikasina yayinliyor. GitHub isi 06:00'da da calistirsa
+// 10:00'da da calistirsa, video TRT 11:00'de yayina giriyor.
 //
-// YENİ TASARIM: dakikaya değil, sıraya ve aralığa bakıyoruz. Tetikleme ne
-// zaman gelirse gelsin şu üç şart sağlanıyorsa video üretilir:
-//   1) Günün video kotası dolmamış  (EN_ERKEN.length adet)
-//   2) Sıradaki videonun en erken saati geçmiş ve yayın penceresi kapanmamış
-//   3) Bir önceki videonun üstünden en az MIN_ARALIK_DK geçmiş
-// Böylece tetikleme 30 dakika da gecikse 4 saat de gecikse video çıkar;
-// sadece izleyicinin olmadığı saatlere kaymaz.
+// Boylece iki bagimsiz pencere olusuyor:
+//   HAZIRLIK penceresi -> videonun uretilip yuklenmesi gereken aralik
+//   YAYIN saati        -> videonun izleyiciye gorunecegi tam an (sabit)
 //
-// Kullanım:
-//   node scripts/slotGuard.mjs check   -> GITHUB_OUTPUT'a should_run / slot yazar
-//   node scripts/slotGuard.mjs done    -> yayınlanan saati güne işler
+// Kullanim:
+//   node scripts/slotGuard.mjs check   -> GITHUB_OUTPUT'a should_run / slot / publish_at yazar
+//   node scripts/slotGuard.mjs done    -> yayinlanan hedefi gune isler
 
 import fs from "node:fs";
 import path from "node:path";
@@ -31,34 +29,29 @@ import path from "node:path";
 const DATA_DIR = path.resolve("data");
 const STATE_FILE = path.join(DATA_DIR, "slots.json");
 
-// Günün n'inci videosu bu saatten ÖNCE atılmaz (UTC). TRT = UTC+3.
-//   08:00 UTC = 11:00 TRT   (öğleye doğru)
-//   14:00 UTC = 17:00 TRT   (okul/iş çıkışı)
-// Bunlar "tam bu saatte at" değil, "bu saatten sonra ilk fırsatta at"
-// demek. Gecikme eklenince pratikte TRT 12:00-15:00 ve 18:00-21:00
-// aralıklarına düşüyor.
+// Turkiye 2016'dan beri yaz saati uygulamiyor; TRT butun yil UTC+3.
+const TRT_OFFSET = 3;
+
+// YAYIN SAATLERI (TRT). Video tam bu saatlerde izleyiciye acilir.
 //
-// Kanalda İKİ AYRI NİŞ dönüşümlü yayınlanıyor ve saatler birbirine
-// girmeyecek şekilde bölündü:
-//   TRT 07:00  quiz        (gknsays/quizshorts deposu)
-//   TRT 11:00  pratik bilgi <- bu depo
-//   TRT 14:00  quiz        (gknsays/quizshorts deposu)
-//   TRT 17:00  pratik bilgi <- bu depo
-//   TRT 19:30  quiz        (gknsays/quizshorts deposu)
-// Yani bu depo günde 2 video atıyor; kalan 3'ü quiz deposunun işi.
-const EN_ERKEN = ["08:00", "14:00"];
+// Kanalda IKI AYRI NIS donusumlu yayinlaniyor, saatler boyle bolundu:
+//   TRT 07:00  quiz         (gknsays/quizshorts deposu)
+//   TRT 11:00  pratik bilgi <- BU DEPO
+//   TRT 14:00  quiz         (gknsays/quizshorts deposu)
+//   TRT 17:00  pratik bilgi <- BU DEPO
+//   TRT 19:30  quiz         (gknsays/quizshorts deposu)
+const YAYIN_SAATLERI = ["11:00", "17:00"];
 
-// Yayın penceresinin kapanışı (UTC). 20:00 UTC = 23:00 TRT.
-// Bundan sonra gelen tetikleme video üretmez: gece 02:00'de video atmak
-// videoyu ölü bir saatte yakmak demek, slotu düşürmek daha doğru.
-const PENCERE_BITIS = "20:00";
+// Video, yayin saatinden en fazla bu kadar once uretilmeye baslanir.
+// Genis tutuluyor: GitHub tetiklemeleri saatlerce gecikebildigi icin
+// hedeften once ise yarayan bir tetikleme yakalama sansini bu belirliyor.
+// 5 saat = TRT 11:00 videosu icin 06:00'dan itibaren uretilebilir.
+const HAZIRLIK_SAATI = 5;
 
-// Bu deponun iki videosu arasında en az bu kadar süre olsun. Aynı kanaldan
-// kısa aralıkla çıkan videolar YouTube'un ayırdığı başlangıç gösterim
-// havuzunu bölüşüyor ve birbirinin izleyicisini yiyor. Nominal aralık 6 saat
-// (TRT 11:00 -> 17:00); 3 saat, ilk video gecikmeli çıktığında ikincisinin
-// hemen ardına yapışmasını engelliyor.
-const MIN_ARALIK_DK = 180;
+// Yayin saati gectigi halde video hala uretilmemisse (GitHub o pencerede
+// hic tetikleme gondermediyse) bu sure boyunca hala uretilir - ama artik
+// zamanlanmadan, DOGRUDAN yayinlanir. Bunun otesinde o yayin dusurulur.
+const GECIKME_TOLERANSI_SAAT = 3;
 
 function loadState() {
   try {
@@ -69,7 +62,7 @@ function loadState() {
 }
 
 function saveState(state) {
-  // Geçmiş günleri sonsuza kadar tutmaya gerek yok; son 7 gün yeter.
+  // Gecmis gunleri sonsuza kadar tutmaya gerek yok; son 7 gun yeter.
   const days = Object.keys(state).sort();
   const trimmed = {};
   for (const d of days.slice(-7)) trimmed[d] = state[d];
@@ -79,20 +72,45 @@ function saveState(state) {
 }
 
 const pad = (n) => String(n).padStart(2, "0");
-const todayKey = (d) =>
+const gunKey = (d) =>
   `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 
-function toMinutes(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
+// TRT "HH:MM" -> bugunku o ana denk gelen UTC Date nesnesi.
+function trtSaatiUtcTarihe(now, hhmm) {
+  const [saat, dakika] = hhmm.split(":").map(Number);
+  const d = new Date(now);
+  d.setUTCHours(saat - TRT_OFFSET, dakika, 0, 0);
+  return d;
 }
 
-// Bugün yayınlananların en geç olanı (dakika cinsinden), yoksa null.
-function sonYayinDakikasi(yayinlananlar) {
-  const dakikalar = yayinlananlar
-    .map(toMinutes)
-    .filter((n) => Number.isFinite(n));
-  return dakikalar.length ? Math.max(...dakikalar) : null;
+const trtGoster = (d) => {
+  const t = new Date(d.getTime() + TRT_OFFSET * 3600 * 1000);
+  return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+};
+
+// Su an uretilmesi gereken yayin hangisi?
+function siradakiYayin(now, yapilanlar) {
+  for (const saat of YAYIN_SAATLERI) {
+    if (yapilanlar.includes(saat)) continue;
+
+    const yayinAni = trtSaatiUtcTarihe(now, saat);
+    const hazirlikBaslangici = new Date(
+      yayinAni.getTime() - HAZIRLIK_SAATI * 3600 * 1000
+    );
+    const sonSans = new Date(
+      yayinAni.getTime() + GECIKME_TOLERANSI_SAAT * 3600 * 1000
+    );
+
+    if (now < hazirlikBaslangici) {
+      return { durum: "erken", saat, hazirlikBaslangici };
+    }
+    if (now > sonSans) {
+      // Bu yayin tamamen kacti; sonrakine bak.
+      continue;
+    }
+    return { durum: "uret", saat, yayinAni, gecikti: now >= yayinAni };
+  }
+  return { durum: "yok" };
 }
 
 function writeOutput(lines) {
@@ -101,76 +119,69 @@ function writeOutput(lines) {
   fs.appendFileSync(out, lines.join("\n") + "\n");
 }
 
-function karar(nowMin, yayinlananlar) {
-  const sira = yayinlananlar.length;
-
-  if (sira >= EN_ERKEN.length) {
-    return { calis: false, sebep: `Günün ${EN_ERKEN.length} videosu da atılmış.` };
-  }
-  if (nowMin > toMinutes(PENCERE_BITIS)) {
-    return {
-      calis: false,
-      sebep: `Yayın penceresi kapandı (${PENCERE_BITIS} UTC). Kalan videolar bugün atlanıyor.`,
-    };
-  }
-  if (nowMin < toMinutes(EN_ERKEN[sira])) {
-    return {
-      calis: false,
-      sebep: `${sira + 1}. video en erken ${EN_ERKEN[sira]} UTC'de atılabilir.`,
-    };
-  }
-  const son = sonYayinDakikasi(yayinlananlar);
-  if (son !== null && nowMin - son < MIN_ARALIK_DK) {
-    return {
-      calis: false,
-      sebep: `Son videonun üstünden ${nowMin - son} dk geçti, en az ${MIN_ARALIK_DK} dk gerekiyor.`,
-    };
-  }
-  return { calis: true, sira: sira + 1 };
-}
-
 function main() {
   const command = process.argv[2] || "check";
   const now = new Date();
   const state = loadState();
-  const key = todayKey(now);
-  const saatUtc = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`;
+  const key = gunKey(now);
 
   if (command === "done") {
     const slot = process.env.SLOT;
     if (!slot) {
-      console.error("SLOT ortam değişkeni yok, işaretlenemedi.");
+      console.error("SLOT ortam degiskeni yok, islenemedi.");
       process.exit(1);
     }
-    // Elle tetiklenen çalıştırmalar kotaya sayılmaz; işaretlenirse o günün
-    // zamanlanmış videolarından biri atlanmış olur.
+    // Elle tetiklenen calistirmalar gunluk kotaya sayilmaz; islenirse o gunun
+    // zamanlanmis yayinlarindan biri atlanmis olur.
     if (slot === "manual") {
-      console.log("Manuel çalıştırma, kotaya işlenmiyor.");
+      console.log("Manuel calistirma, kotaya islenmiyor.");
       return;
     }
     state[key] = [...new Set([...(state[key] || []), slot])].sort();
     saveState(state);
-    console.log(`✅ ${key} ${slot} yayınlandı olarak işlendi.`);
+    console.log(`OK: ${key} TRT ${slot} yayini hazirlandi olarak islendi.`);
     return;
   }
 
-  const yayinlananlar = state[key] || [];
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const sonuc = karar(nowMin, yayinlananlar);
+  const yapilanlar = state[key] || [];
+  const sonuc = siradakiYayin(now, yapilanlar);
 
-  console.log(`Şu an (UTC): ${key} ${saatUtc}`);
-  console.log(`Bugün atılanlar: ${yayinlananlar.join(", ") || "yok"}`);
+  console.log(`Su an: ${key} ${trtGoster(now)} TRT`);
+  console.log(`Bugun hazirlananlar: ${yapilanlar.join(", ") || "yok"}`);
 
-  if (!sonuc.calis) {
-    console.log(`→ Video üretilmeyecek. ${sonuc.sebep}`);
+  if (sonuc.durum === "yok") {
+    console.log("-> Bugun hazirlanacak yayin kalmadi.");
     writeOutput(["should_run=false"]);
     return;
   }
 
-  console.log(`→ Günün ${sonuc.sira}. videosu üretilecek (${saatUtc} UTC).`);
-  // Slot etiketi olarak tetiklemenin geldiği saati kullanıyoruz; sabit slot
-  // saatleri artık yok, gerçekte ne zaman yayınlandığı bilgisi daha değerli.
-  writeOutput(["should_run=true", `slot=${saatUtc}`]);
+  if (sonuc.durum === "erken") {
+    console.log(
+      `-> Henuz erken. TRT ${sonuc.saat} yayini icin uretim ${trtGoster(sonuc.hazirlikBaslangici)} TRT'de basliyor.`
+    );
+    writeOutput(["should_run=false"]);
+    return;
+  }
+
+  const cikti = ["should_run=true", `slot=${sonuc.saat}`];
+
+  if (sonuc.gecikti) {
+    // Yayin saati gecmis ve video hala yok: zamanlamanin anlami kalmadi,
+    // dogrudan yayinla. publish_at bos birakiliyor.
+    console.log(
+      `-> TRT ${sonuc.saat} yayini gecikti, video uretilip DOGRUDAN yayinlanacak.`
+    );
+    cikti.push("publish_at=");
+  } else {
+    // Normal yol: videoyu simdi uret, YouTube'a "TRT ${saat}'te yayinla" de.
+    const publishAt = sonuc.yayinAni.toISOString().replace(/\.\d{3}Z$/, "Z");
+    console.log(
+      `-> Video simdi uretilecek, YouTube'a TRT ${sonuc.saat} (${publishAt}) icin zamanlanacak.`
+    );
+    cikti.push(`publish_at=${publishAt}`);
+  }
+
+  writeOutput(cikti);
 }
 
 main();

@@ -39,7 +39,45 @@ async function main() {
     ? metadata.description
     : `${metadata.description}\n\n#Shorts`;
 
+  // YAYIN SAATINI GITHUB'A DEGIL YOUTUBE'A BIRAKIYORUZ.
+  // GitHub Actions tetiklemeleri saatlerce gecikebiliyor, dolayisiyla
+  // "isin calistigi an" yayin saati olarak kullanilamaz. Bunun yerine video
+  // hedef saatten once uretilip "private + publishAt" ile yukleniyor;
+  // yayina alma isini YouTube dakikasi dakikasina kendisi yapiyor.
+  //
+  // PUBLISH_AT, scripts/slotGuard.mjs tarafindan RFC3339 (UTC) olarak
+  // veriliyor. Bos ise ya da gecmisteyse dogrudan yayinlaniyor - gecmis bir
+  // ana zamanlama yapilamaz, YouTube bunu hata olarak dondurur.
+  const publishAtRaw = (process.env.PUBLISH_AT || "").trim();
+  let publishAt = null;
+  if (publishAtRaw) {
+    const hedef = new Date(publishAtRaw);
+    if (Number.isNaN(hedef.getTime())) {
+      console.warn(`PUBLISH_AT okunamadi ("${publishAtRaw}"), dogrudan yayinlanacak.`);
+    } else if (hedef.getTime() <= Date.now()) {
+      console.warn(`PUBLISH_AT gecmiste (${publishAtRaw}), dogrudan yayinlanacak.`);
+    } else {
+      publishAt = hedef.toISOString().split(".")[0] + "Z";
+    }
+  }
+
+  // publishAt yalnizca video "private" yuklendiginde calisir; "public"
+  // yuklenirse YouTube zamanlamayi yok sayar ve video aninda yayina girer.
+  const status = publishAt
+    ? { privacyStatus: "private", publishAt, selfDeclaredMadeForKids: false }
+    : {
+        privacyStatus: process.env.YT_PRIVACY_STATUS || "public",
+        selfDeclaredMadeForKids: false,
+      };
+
   console.log("YouTube'a yükleniyor:", metadata.title);
+  if (publishAt) {
+    const trt = new Date(new Date(publishAt).getTime() + 3 * 3600 * 1000);
+    const iki = (n) => String(n).padStart(2, "0");
+    console.log(
+      `Yayin zamanlandi: ${iki(trt.getUTCHours())}:${iki(trt.getUTCMinutes())} TRT (${publishAt})`
+    );
+  }
 
   const res = await youtube.videos.insert({
     part: ["snippet", "status"],
@@ -56,19 +94,17 @@ async function main() {
         defaultLanguage: "tr",
         defaultAudioLanguage: "tr",
       },
-      status: {
-        privacyStatus: process.env.YT_PRIVACY_STATUS || "public",
-        selfDeclaredMadeForKids: false,
-      },
+      status,
     },
     media: {
       body: fs.createReadStream(VIDEO_PATH),
     },
   });
 
-  console.log(
-    `✅ Yüklendi: https://youtube.com/shorts/${res.data.id}`
-  );
+  console.log(`✅ Yüklendi: https://youtube.com/shorts/${res.data.id}`);
+  if (publishAt) {
+    console.log("Video su an gizli; YouTube yukaridaki saatte kendisi yayina alacak.");
+  }
 }
 
 main().catch((err) => {
