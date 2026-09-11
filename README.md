@@ -1,10 +1,23 @@
 # Günlük Shorts Otomasyonu (Remotion + YouTube) — 100% Ücretsiz Sürüm
 
+> **BU OTOMASYON IPTAL EDILDI (11 Eylul 2026).**
+> Pratik bilgi videolari kanalda gorunmedigi icin zamanlanmis uretim
+> tamamen kaldirildi: GitHub Actions workflow'u, uretim hatti script'leri
+> (`run.mjs`, `generateScript.mjs`, `generateVoice.mjs`, `fetchBackground.mjs`,
+> `makeMusic.mjs`, `render.mjs`, `upload.mjs`, `slotGuard.mjs`, `produceVideo.mjs`)
+> ve `data/` altindaki tum durum dosyalari silindi. Format sifirdan
+> yeniden tasarlanacak. Eski kod git gecmisinde: `git show 7e6e8ac`.
+>
+> Asagidaki dokumantasyon eski kuruluma aittir, artik gecerli degildir.
+
+---
+
+
 Bu proje her çalıştırıldığında:
 0. **Arka plan müziğini** saf Node ile sentezler (indirme yok, telif riski yok — `public/music/` yoksa üretilir).
 1. **Google Gemini API (ücretsiz)** ile "günlük hayatta yanlış yapılan bir iş ve doğrusu" temalı bir konu, **kanca (hook)**, seslendirme metni, YouTube başlığı/açıklama/etiketleri üretir. Konu, geçmiştekilerle benzerlik ölçülerek tekrar etmemesi sağlanır.
 2. **Microsoft Edge TTS (ücretsiz, API anahtarı gerekmez)** ile metni dört ayrı bölüm halinde (KANCA → YANLIŞ → DOĞRU → ABONE OL), her bölümde biraz artan enerjiyle Türkçe seslendirmeye çevirir ve kelime kelime zaman damgası alır.
-3. **Pexels (ücretsiz)**'ten konuya uygun 5 farklı dikey (9:16) stok video indirir.
+3. **ASMR arka planı** hazırlar: `public/video/asmr/` altındaki yerel kütüphaneden 5 klip seçer, kütüphane küçükse Pexels/Pixabay'den birkaç yeni ASMR klibi (kinetik kum, slime, sabun kesme, boya karıştırma, su dökme...) indirip kütüphaneye ekler. Arka plan konudan bağımsızdır; anlatımı seslendirme ve altyazı taşır.
 4. **Remotion** ile dikey Shorts videosunu render eder: ilk ~2.5 saniyede ekranı kaplayan kanca kartı, konuşulan kelimenin renkli vurgulandığı (karaoke tarzı) altyazı, "YANLIŞ / DOĞRU" rozetleri, üstte ilerleme çubuğu, kapanışta abone animasyonu ve kısık arka plan müziği.
 5. **YouTube Data API v3 (ücretsiz)** ile videoyu kanala Shorts olarak, Türkçe dil etiketiyle yükler.
 
@@ -20,8 +33,8 @@ Bu proje her çalıştırıldığında:
 |---|--------|----------------------|------------------|---------|
 | 1 | **Google Gemini API** | Konu/senaryo/başlık üretimi | [aistudio.google.com](https://aistudio.google.com/apikey) > Get API key | **Ücretsiz** (süresiz, kart istemiyor; Flash model günlük düşük hacimli kullanım için fazlasıyla yeterli) |
 | 2 | **Microsoft Edge TTS** | Türkçe seslendirme + kelime zamanlaması | Hiçbir kayıt/anahtar gerekmiyor, kod içinde hazır | **Ücretsiz**, sınırsız |
-| 3 | **Pexels API** | Telifsiz stok video | [pexels.com/api](https://www.pexels.com/api/) | **Ücretsiz**, anında key veriyor |
-| 3b | **Pixabay API** | İkinci stok video kaynağı (opsiyonel ama önerilir) | [pixabay.com/api/docs](https://pixabay.com/api/docs/) | **Ücretsiz**, ticari kullanım serbest, atıf gerekmiyor |
+| 3 | **Pexels API** | ASMR arka plan klipleri | [pexels.com/api](https://www.pexels.com/api/) | **Ücretsiz**, anında key veriyor |
+| 3b | **Pixabay API** | İkinci ASMR klip kaynağı (opsiyonel; kütüphaneyi çeşitlendirir) | [pixabay.com/api/docs](https://pixabay.com/api/docs/) | **Ücretsiz**, ticari kullanım serbest, atıf gerekmiyor |
 | 4 | **YouTube Data API v3** | Videoyu kanala otomatik yükleme | Google Cloud Console (aşağıdaki adımlar) | **Ücretsiz** (günlük kota dahilinde; 1 video/gün bu kotanın çok altında) |
 
 ### YouTube Data API v3 kurulumu (adım adım)
@@ -122,17 +135,28 @@ Bundan sonra her gün otomatik olarak: 4 farklı konu → seslendirme → video 
 
 ---
 
-## Arka plan videolarının konu dışına çıkmaması
+## Arka plan: konuya göre klip değil, ASMR kütüphanesi
 
-Stok video API'leri, sorguya uyan sonuç bulamadıklarında boş dönmek yerine "yakın" saydıkları popüler klipleri döndürür. Dönen sonucu alakalı varsaymak bu yüzden yanlıştır: limon konulu bir videoda hamur açma, soğan doğrama ve kayısı klipleri bu şekilde geliyordu.
+Önceki sürüm her konu için İngilizce arama terimleri üretip stok kütüphanelerinde konuya uygun klip arıyordu. Sorun şuydu: stok video API'leri sorguya uyan sonuç bulamadıklarında boş dönmek yerine "yakın" saydıkları popüler klipleri döndürüyor — limon konulu bir videoda hamur açma, soğan doğrama ve kayısı klipleri böyle geliyordu. Filtreyi sıkılaştırmak bunu engelliyor, ama bu sefer konu havuzunu daraltıyordu: stok kütüphaneleri uluslararası olduğu için "kombi", "sigorta kutusu", "derz" gibi konuların karşılığı yok ve pipeline "uygun klip yok" diye duruyordu.
 
-`scripts/fetchBackground.mjs` bunu üç kademeyle engelliyor:
+Anlatımı zaten seslendirme ve altyazı taşıyor; arka planın konuyu göstermesi şart değil. Bu yüzden arka plan artık konudan tamamen bağımsız ASMR/"tatmin edici görüntü" klipleri:
 
-1. **Sert konu filtresi.** Gemini her konu için `stok_zorunlu_kelimeler` üretir (ör. limon konusunda `["lemon","citrus","juice"]`, uzatma kablosunda `["cable","cord","socket","plug"]`). Bir klibin açıklayıcı metninde — Pexels'te adres slug'ı, Pixabay'de etiketler — bu kelimelerden **en az biri geçmiyorsa klip elenir**, puanı ne olursa olsun.
-2. **Kademeli arama.** Spesifik terim → genel konu terimi, her biri Pexels ve Pixabay üzerinde, önce dikey sonra her yön. Sorgu genişlese bile sert filtre her adımda uygulandığı için konu dışına çıkılmaz.
-3. **Alakasız klip indirme yasağı.** Bir sahneye uygun yeni klip bulunamazsa onaylanmış kliplerden biri o sahnede tekrar kullanılır. Hiç uygun klip yoksa pipeline durur — konu dışı bir video yayınlamaktansa o gün video çıkmasın.
+- **Alaka iddiası yok, alaka sorunu da yok.** Klipler konuyla eşleştirilmediği için "alakasız klip" diye bir hata durumu kalmıyor.
+- **Konu seçimi serbestleşti.** `generateScript.mjs` artık konuyu stok kütüphanesinde görüntüsü bulunanlarla sınırlamıyor; `stok_*` alanları tamamen kaldırıldı.
+- **Yerel kütüphane.** Klipler `public/video/asmr/` altında birikir, `library.json` ile takip edilir. Her çalıştırmada kütüphane en fazla birkaç klip büyür (varsayılan 4), video için gereken klipler ise **en az kullanılanlardan** seçilir — kota harcanmadan videolar arası çeşitlilik korunur. GitHub Actions'ta kütüphane `actions/cache` ile çalıştırmalar arasında saklanır.
+- **Kendi kliplerin.** `public/video/asmr/` içine attığın `.mp4/.mov/.webm` dosyaları ilk çalıştırmada kütüphaneye alınır ve aynı rotasyona girer.
 
-`orientation=portrait` kısıtı da gevşetildi: dikey stok havuzu küçük olduğu için dikeyde uygun sonuç yoksa yatay klipler aranıp 9:16'ya kırpılıyor. Konuya uygun yatay klip, alakasız dikey klipten iyidir.
+Ayarlar (hepsi opsiyonel, `.env`):
+
+| Değişken | Varsayılan | Ne yapar |
+|---|---|---|
+| `ASMR_CLIPS_PER_VIDEO` | 5 | Bir videoda kaç klip kullanılacağı (render sahne dağılımıyla uyumlu olmalı) |
+| `ASMR_LIBRARY_SIZE` | 18 | Kütüphanede tutulmak istenen farklı klip sayısı |
+| `ASMR_MAX_NEW_PER_RUN` | 4 | Tek çalıştırmada indirilecek en fazla yeni klip |
+
+Klip seçimi kırpma sonrası çözünürlüğe göre yapılır: video 1080x1920 render edildiği için yatay bir klip 9:16'ya kırpıldığında elde kalan genişlik (yükseklik × 9/16) esas alınır — 1920x1080 bir klip aslında 607 piksel demektir. 1080'i karşılayan dosyaların en küçüğü indirilir; kalite yeterli olur, dosya gereksiz büyümez.
+
+ASMR görüntüler parlak ve yüksek kontrastlı olabildiği için `src/ShortVideo.tsx` içinde arka planın üstüne ekranın tamamını kaplayan hafif bir karartma (`rgba(0,0,0,0.22)`) eklendi; mevcut alt/üst gradyan bunun üzerinde duruyor.
 
 ## Video/tasarım özelleştirme
 
